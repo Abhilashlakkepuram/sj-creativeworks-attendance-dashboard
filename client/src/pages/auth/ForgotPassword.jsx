@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import api from "../../services/api";
+import api from "../../config/axiosConfig";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
 import logo from "../../assets/sj-logo.png";

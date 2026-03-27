@@ -151,36 +151,31 @@ const forgotPassword = async (req, res) => {
     await user.save();
 
 
-    // HTML Email Template
+    const logoUrl = "https://sjcreativeworks.com/wp-content/uploads/2024/04/latestup-scaled.png"; // Replace with your actual hosted logo URL
+
     const html = `
 <div style="background-color: #f4f6f8; padding: 40px 15px; font-family: 'Segoe UI', Arial, sans-serif;">
-    <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e1e5ea; border-radius: 12px; overflow: hidden; shadow: 0 4px 6px rgba(0,0,0,0.05);">
-        <!-- Header -->
-        <div style="padding: 30px; background-color: #ffffff; text-align: center; border-bottom: 1px solid #f0f0f0;">
-            <h1 style="margin: 0; color: #1F8B8D; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">SJ Creativeworks</h1>
+    <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e1e5ea; border-radius: 12px; overflow: hidden;">
+        <div style="padding: 30px; text-align: center; border-bottom: 1px solid #f0f2f5;">
+            <img src="${logoUrl}" alt="SJ Creativeworks" style="height: 40px; margin-bottom: 15px;">
+            <h2 style="color: #1a202c; margin: 0; font-size: 20px; font-weight: 700;">Password Reset Request</h2>
         </div>
-
-        <!-- Content -->
         <div style="padding: 40px 30px;">
-            <h2 style="font-size: 20px; color: #2d3748; margin: 0 0 16px; font-weight: 700; text-align: center;">Password Reset Request</h2>
-            <p style="font-size: 15px; color: #4a5568; line-height: 1.6; text-align: center; margin-bottom: 30px;">
-                You requested to reset your password. Use the following 6-digit verification code to complete the process:
+            <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 25px;">
+                Hello <strong>${user.name}</strong>,<br><br>
+                We received a request to reset your password. Use the verification code below to proceed:
             </p>
-
-            <!-- OTP Box -->
-            <div style="background-color: #f8fafc; border: 2px dashed #e2e8f0; border-radius: 12px; padding: 25px; text-align: center; margin-bottom: 30px;">
-                <span style="font-size: 36px; font-weight: 800; color: #1F8B8D; letter-spacing: 8px; font-family: 'Courier New', monospace;">${otp}</span>
+            <div style="background-color: #f8fafc; border: 2px dashed #e2e8f0; border-radius: 8px; padding: 25px; text-align: center; margin-bottom: 25px;">
+                <span style="font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #1F8B8D; font-family: monospace;">${otp}</span>
             </div>
-
-            <p style="font-size: 13px; color: #718096; line-height: 1.6; text-align: center; margin-top: 20px;">
-                This code is valid for <strong>10 minutes</strong>. If you didn't request this, please ignore this email or contact support.
+            <p style="color: #718096; font-size: 13px; text-align: center;">
+                This code is valid for <strong>10 minutes</strong>.<br>
+                If you didn't request this, you can safely ignore this email.
             </p>
         </div>
-
-        <!-- Footer -->
-        <div style="padding: 20px 30px; background-color: #fafbfc; border-top: 1px solid #f0f0f0; text-align: center;">
+        <div style="padding: 20px; background-color: #fcfdfe; text-align: center; border-top: 1px solid #f0f2f5;">
             <p style="font-size: 12px; color: #a0aec0; margin: 0;">
-                © ${new Date().getFullYear()} SJ Creativeworks Dashboard. All rights reserved.
+                &copy; 2026 SJ Creativeworks. All rights reserved.
             </p>
         </div>
     </div>
@@ -190,7 +185,7 @@ const forgotPassword = async (req, res) => {
     await sendEmail(email, "Password Reset OTP - SJ Creativeworks", html);
 
     res.json({
-      message: "OTP sent to email"
+      message: "Password reset OTP sent to your email"
     });
 
   } catch (error) {

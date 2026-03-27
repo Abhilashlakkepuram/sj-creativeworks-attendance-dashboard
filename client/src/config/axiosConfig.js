@@ -11,7 +11,7 @@ const getBaseURL = () => {
 const api = axios.create({
     baseURL: getBaseURL(),
     withCredentials: true,
-    timeout: 10000,
+    timeout: 30000, // Increased to 30s to handle potential email service delays
 });
 
 // Add a request interceptor
