@@ -151,81 +151,43 @@ const forgotPassword = async (req, res) => {
     await user.save();
 
 
-    const logoUrl = "https://sjcreativeworks.com/wp-content/uploads/2024/04/latestup-scaled.png"; // Replace with your actual hosted logo URL
-
+    // HTML Email Template
     const html = `
 <div style="background-color: #f4f6f8; padding: 40px 15px; font-family: 'Segoe UI', Arial, sans-serif;">
-
-    <div style="max-width: 620px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e1e5ea; border-radius: 6px;">
-        
+    <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e1e5ea; border-radius: 12px; overflow: hidden; shadow: 0 4px 6px rgba(0,0,0,0.05);">
         <!-- Header -->
-        <div style="padding: 20px 30px; border-bottom: 1px solid #e1e5ea;">
-            <img src="${logoUrl}" alt="SJ Creativeworks" style="height: 36px;">
+        <div style="padding: 30px; background-color: #ffffff; text-align: center; border-bottom: 1px solid #f0f0f0;">
+            <h1 style="margin: 0; color: #1F8B8D; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">SJ Creativeworks</h1>
         </div>
 
         <!-- Content -->
-        <div style="padding: 30px 30px 25px;">
-            
-            <h1 style="font-size: 18px; color: #2d3748; margin: 0 0 20px; font-weight: 600;">
-                Working Day Notification
-            </h1>
-
-            <p style="font-size: 14px; color: #4a5568; line-height: 1.7; margin-bottom: 18px;">
-                Dear Team,
+        <div style="padding: 40px 30px;">
+            <h2 style="font-size: 20px; color: #2d3748; margin: 0 0 16px; font-weight: 700; text-align: center;">Password Reset Request</h2>
+            <p style="font-size: 15px; color: #4a5568; line-height: 1.6; text-align: center; margin-bottom: 30px;">
+                You requested to reset your password. Use the following 6-digit verification code to complete the process:
             </p>
 
-            <p style="font-size: 14px; color: #4a5568; line-height: 1.7; margin-bottom: 18px;">
-                This is to inform all employees that <strong>SJ Creativeworks</strong> will remain operational on the date mentioned below.
-            </p>
-
-            <!-- Info Block -->
-            <div style="border: 1px solid #e6ebf1; border-radius: 6px; padding: 20px; background-color: #fafbfc; margin: 25px 0;">
-                
-                <table style="width: 100%; border-collapse: collapse;">
-                    <tr>
-                        <td style="font-size: 13px; color: #718096; padding-bottom: 6px;">Date</td>
-                    </tr>
-                    <tr>
-                        <td style="font-size: 15px; color: #1F8B8D; font-weight: 600;">
-                            27 March 2026
-                        </td>
-                    </tr>
-                </table>
-
+            <!-- OTP Box -->
+            <div style="background-color: #f8fafc; border: 2px dashed #e2e8f0; border-radius: 12px; padding: 25px; text-align: center; margin-bottom: 30px;">
+                <span style="font-size: 36px; font-weight: 800; color: #1F8B8D; letter-spacing: 8px; font-family: 'Courier New', monospace;">${otp}</span>
             </div>
 
-            <p style="font-size: 14px; color: #4a5568; line-height: 1.7; margin-bottom: 18px;">
-                Please note that this will be a regular working day, and all employees are expected to adhere to their normal work schedules.
+            <p style="font-size: 13px; color: #718096; line-height: 1.6; text-align: center; margin-top: 20px;">
+                This code is valid for <strong>10 minutes</strong>. If you didn't request this, please ignore this email or contact support.
             </p>
-
-            <p style="font-size: 14px; color: #4a5568; line-height: 1.7; margin-bottom: 25px;">
-                Kindly ensure your availability and plan your tasks accordingly.
-            </p>
-
-            <!-- Signature -->
-            <p style="font-size: 14px; color: #2d3748; margin-bottom: 5px;">
-                Regards,
-            </p>
-            <p style="font-size: 14px; color: #2d3748; margin: 0;">
-                <strong>Management</strong><br>
-                SJ Creativeworks
-            </p>
-
         </div>
 
         <!-- Footer -->
-        <div style="padding: 15px 30px; border-top: 1px solid #e1e5ea; background-color: #fafbfc;">
+        <div style="padding: 20px 30px; background-color: #fafbfc; border-top: 1px solid #f0f0f0; text-align: center;">
             <p style="font-size: 12px; color: #a0aec0; margin: 0;">
-                This is a system-generated communication. For any queries, please contact HR.
+                © ${new Date().getFullYear()} SJ Creativeworks Dashboard. All rights reserved.
             </p>
         </div>
-
     </div>
-
 </div>
 `;
 
-    await sendEmail(email, "NO HOLIDAY ON 27th March 2026", html);
+    await sendEmail(email, "Password Reset OTP - SJ Creativeworks", html);
 
     res.json({
       message: "OTP sent to email"
