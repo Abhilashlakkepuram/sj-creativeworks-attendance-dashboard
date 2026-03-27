@@ -17,7 +17,8 @@ const api = axios.create({
 // Add a request interceptor
 api.interceptors.request.use(
     (config) => {
-        console.log(`🚀 Request: ${config.method?.toUpperCase()} ${config.url}`);
+        const fullURL = config.baseURL ? `${config.baseURL}${config.url}` : config.url;
+        console.log(`🚀 Request: ${config.method?.toUpperCase()} ${fullURL}`);
         const token = localStorage.getItem("token");
         if (token && token !== "null" && token !== "undefined") {
             config.headers.Authorization = `Bearer ${token}`;

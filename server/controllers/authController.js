@@ -122,11 +122,9 @@ const loginUser = async (req, res) => {
 };
 
 const forgotPassword = async (req, res) => {
-
+  console.log("== FORGOT PASSWORD ATTEMPT == Email:", req.body.email);
   try {
-
     const { email } = req.body;
-
     const user = await User.findOne({ email });
 
     if (!user) {
