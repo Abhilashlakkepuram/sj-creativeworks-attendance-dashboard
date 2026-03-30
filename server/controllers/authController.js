@@ -192,12 +192,21 @@ const forgotPassword = async (req, res) => {
 </div>
 `;
 
-    // 🔥 Send email in the background (NON-BLOCKING)
-    sendEmail(email, "Password Reset OTP - SJ Creativeworks", html).catch((err) => {
-      console.error("❌ Background Email Error:", err.message);
-    });
+    // 🔥 Resilient Email Sending: 
+    // Give the SMTP server up to 15 seconds to send before returning success.
+    // This keeps the process active while avoiding the 45s frontend timeout.
+    const emailPromise = sendEmail(email.trim(), "Password Reset OTP - SJ Creativeworks", html);
+    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve("TIMEOUT"), 15000));
 
-    // Return response immediately
+    const result = await Promise.race([emailPromise, timeoutPromise]);
+
+    if (result === "TIMEOUT") {
+      console.warn(`[${requestId}] ⚠️ Email sending is taking longer than 15s. Continuing in background...`);
+    } else {
+      console.log(`[${requestId}] ✅ Email flow completed successfully within grace period.`);
+    }
+
+    // Return response
     res.json({
       message: "Password reset OTP sent to your email"
     });

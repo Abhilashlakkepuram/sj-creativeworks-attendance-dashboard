@@ -11,7 +11,9 @@ const transporter = nodemailer.createTransport({
   tls: {
     rejectUnauthorized: false
   },
-  timeout: 10000 // 10s connection timeout
+  timeout: 10000, // 10s connection timeout
+  debug: true,    // 🔥 Show full SMTP traffic in logs
+  logger: true    // 🔥 Use built-in logger
 });
 
 // Verify transport on startup
