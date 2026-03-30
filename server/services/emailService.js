@@ -46,6 +46,7 @@ transporter.verify((error) => {
  * Prefers Resend API, falls back to SMTP (Zoho), then falls back to Port 587.
  */
 const sendEmail = async (to, subject, html) => {
+  let lastError = "Unknown error";
   // 1️⃣ TRY RESEND (Preferred if key is set)
   if (resend) {
     try {
@@ -59,13 +60,15 @@ const sendEmail = async (to, subject, html) => {
 
       if (data && data.id) {
         console.log("✅ Email sent via Resend:", data.id);
-        return true;
+        return { success: true };
       }
 
       console.error("❌ Resend API Error:", error?.message || error);
+      lastError = error?.message || error;
       console.log("🔄 Switching to SMTP fallback...");
     } catch (e) {
       console.error("❌ Resend exception:", e.message);
+      lastError = e.message;
       console.log("🔄 Switching to SMTP fallback...");
     }
   }
@@ -80,8 +83,10 @@ const sendEmail = async (to, subject, html) => {
       html
     });
     console.log("✅ Email sent via SMTP.");
-    return true;
+    return { success: true };
   } catch (error) {
+    lastError = error.message;
+
     // 3️⃣ TRY SMTP AUTO-FALLBACK (e.g. 465 -> 587)
     if (transporter.options.port !== 587) {
       console.warn(`⚠️ SMTP Port ${transporter.options.port} failed. Trying 587 fallback...`);
@@ -95,15 +100,16 @@ const sendEmail = async (to, subject, html) => {
         });
         transporter = fallbackTransporter; // Upgrade global transporter for next time
         console.log("✅ Email sent via SMTP Fallback (Port 587).");
-        return true;
+        return { success: true };
       } catch (fallbackError) {
         console.error("❌ All email methods (Resend & SMTP) failed.");
-        console.error("Final Error Detail:", fallbackError.message);
+        lastError = fallbackError.message;
       }
     } else {
       console.error("❌ SMTP failed and no more fallbacks available.");
     }
-    return false;
+
+    return { error: true, errorMessage: lastError };
   }
 };
 

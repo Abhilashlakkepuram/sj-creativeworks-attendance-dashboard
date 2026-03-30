@@ -180,16 +180,17 @@ const forgotPassword = async (req, res) => {
     `;
 
     // 📧 Send Email
-    const emailSent = await sendEmail(
+    const emailResult = await sendEmail(
       email.trim(),
       "Password Reset OTP - SJ Creativeworks",
       html
     );
 
-    if (!emailSent) {
+    if (emailResult.error) {
       return res.status(500).json({
         success: false,
-        message: "Failed to send OTP email"
+        message: "Failed to send OTP email",
+        error: emailResult.errorMessage
       });
     }
 
