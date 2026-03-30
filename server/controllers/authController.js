@@ -122,12 +122,22 @@ const loginUser = async (req, res) => {
 };
 
 const forgotPassword = async (req, res) => {
-  console.log("== FORGOT PASSWORD ATTEMPT == Email:", req.body.email);
+  const requestId = Math.random().toString(36).substring(7);
+  console.log(`[${requestId}] == FORGOT PASSWORD ATTEMPT == Payload:`, JSON.stringify(req.body));
+  
   try {
     const { email } = req.body;
+    if (!email) {
+      console.warn(`[${requestId}] ⚠️ No email provided in request body`);
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    console.time(`[${requestId}] DB_FIND_USER`);
     const user = await User.findOne({ email });
+    console.timeEnd(`[${requestId}] DB_FIND_USER`);
 
     if (!user) {
+      console.warn(`[${requestId}] ❌ User not found: ${email}`);
       return res.status(404).json({
         message: "User not found"
       });
@@ -146,7 +156,9 @@ const forgotPassword = async (req, res) => {
     user.resetOTPExpires = Date.now() + 10 * 60 * 1000;
     user.resetAttempts = 0;
 
+    console.time(`[${requestId}] DB_SAVE_USER`);
     await user.save();
+    console.timeEnd(`[${requestId}] DB_SAVE_USER`);
 
 
     const logoUrl = "https://sjcreativeworks.com/wp-content/uploads/2024/04/latestup-scaled.png"; // Replace with your actual hosted logo URL
@@ -180,8 +192,12 @@ const forgotPassword = async (req, res) => {
 </div>
 `;
 
-    await sendEmail(email, "Password Reset OTP - SJ Creativeworks", html);
+    // 🔥 Send email in the background (NON-BLOCKING)
+    sendEmail(email, "Password Reset OTP - SJ Creativeworks", html).catch((err) => {
+      console.error("❌ Background Email Error:", err.message);
+    });
 
+    // Return response immediately
     res.json({
       message: "Password reset OTP sent to your email"
     });

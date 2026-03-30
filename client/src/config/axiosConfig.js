@@ -11,7 +11,7 @@ const getBaseURL = () => {
 const api = axios.create({
     baseURL: getBaseURL(),
     withCredentials: true,
-    timeout: 30000, // Increased to 30s to handle potential email service delays
+    timeout: 45000, // Increased to 45s to handle Render cold starts + email delays
 });
 
 // Add a request interceptor
@@ -38,7 +38,15 @@ api.interceptors.response.use(
         return response;
     },
     (error) => {
-        console.error(`❌ Response Error: ${error.response?.status || 'Network Error'} from ${error.config?.url}`);
+        const status = error.response?.status || 'Network Error';
+        const url = error.config?.url || 'unknown URL';
+        const message = error.message || 'No additional error info';
+        console.error(`❌ Response Error: ${status} (${message}) from ${url}`);
+
+        if (!error.response) {
+            console.warn("⚠️ This might be a CORS error, a timeout, or the server might be waking up from sleep.");
+        }
+
         return Promise.reject(error);
     }
 );

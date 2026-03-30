@@ -215,7 +215,30 @@ app.use((err, req, res, next) => {
 // ─────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 
+// ─────────────────────────────────────────────────────
+// ✅ GLOBAL ERROR HANDLERS
+// ─────────────────────────────────────────────────────
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("🔥 Unhandled Rejection at:", promise, "reason:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("🔥 Uncaught Exception:", err);
+  // Give process time to log before exiting if needed
+  setTimeout(() => process.exit(1), 1000);
+});
+
 connectDB().then(() => {
+  // ✅ LOG EVERY REQUEST
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on("finish", () => {
+      const duration = Date.now() - start;
+      console.log(`📡 ${req.method} ${req.originalUrl} - ${res.statusCode} (${duration}ms)`);
+    });
+    next();
+  });
+
   server.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`🌍 ENV: ${process.env.NODE_ENV || "development"}`);

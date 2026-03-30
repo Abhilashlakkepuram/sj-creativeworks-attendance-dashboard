@@ -16,7 +16,6 @@ function Register() {
         role: ""
     });
 
-    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
     const [notification, setNotification] = useState(null);

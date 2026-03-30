@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import api from "../../services/api";
 import { useSocket } from "../../socket/SocketContext";
+import { useAuth } from "../../context/AuthContext";
 import { formatDistanceToNow } from "date-fns";
 
 const typeIcons = {
@@ -20,6 +21,7 @@ function NotificationBell() {
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef(null);
   const socket = useSocket();
+  const { role } = useAuth();
 
   const fetchNotifications = async () => {
     try {
@@ -42,7 +44,7 @@ function NotificationBell() {
       const handleNewNotification = (notif) => {
         setNotifications((prev) => [notif, ...prev].slice(0, 50));
         setUnreadCount((prev) => prev + 1);
-        
+
         // Show a native browser notification if allowed
         if (Notification.permission === "granted") {
           const title = notif.type === "announcement" ? "New Company Announcement" : "New SJCW Alert";
@@ -157,9 +159,8 @@ function NotificationBell() {
                 <div
                   key={notif._id}
                   onClick={() => !notif.isRead && markAsRead(notif._id)}
-                  className={`flex gap-4 px-5 py-4 border-b border-slate-50 cursor-pointer transition-colors ${
-                    !notif.isRead ? "bg-primary-50/30" : "hover:bg-slate-50"
-                  }`}
+                  className={`flex gap-4 px-5 py-4 border-b border-slate-50 cursor-pointer transition-colors ${!notif.isRead ? "bg-primary-50/30" : "hover:bg-slate-50"
+                    }`}
                 >
                   <div className="w-10 h-10 rounded-xl bg-white shadow-sm border border-slate-100 flex items-center justify-center text-lg shrink-0">
                     {typeIcons[notif.type] || "🔔"}
@@ -184,7 +185,7 @@ function NotificationBell() {
           </div>
 
           <Link
-            to="/notifications"
+            to={role === "admin" ? "/admin/notifications" : "/employee/notifications"}
             onClick={() => setIsOpen(false)}
             className="block py-3.5 text-center text-xs font-bold text-slate-500 hover:text-primary-600 bg-slate-50/50 hover:bg-primary-50 transition-colors border-t border-slate-100"
           >

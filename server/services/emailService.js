@@ -25,6 +25,7 @@ const sendEmail = async (to, subject, html) => {
     console.log("Email sent to:", to);
   } catch (error) {
     console.error("Email Error:", error.message);
+    throw error; // Re-throw so the controller knows it failed
   }
 };
 
