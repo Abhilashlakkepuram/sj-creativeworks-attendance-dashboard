@@ -5,7 +5,8 @@ const getBaseURL = () => {
     if (envUrl) {
         return envUrl.endsWith("/api") ? envUrl : `${envUrl}/api`;
     }
-    return "http://localhost:5000/api";
+    // Default to the live Render backend for production robustness
+    return "https://sj-creativeworksdashboard.onrender.com/api";
 };
 
 const api = axios.create({

@@ -1,52 +1,109 @@
 const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT) || 587,
-  secure: process.env.SMTP_PORT === "465", // Only true for 465
-  auth: {
-    user: process.env.SMTP_EMAIL,
-    pass: process.env.SMTP_PASSWORD
-  },
-  tls: {
-    rejectUnauthorized: false
-  },
-  timeout: 10000, // 10s connection timeout
-  debug: true,    // 🔥 Show full SMTP traffic in logs
-  logger: true    // 🔥 Use built-in logger
-});
+// ─────────────────────────────────────────────────────
+// ✅ RESEND CONFIGURATION
+// ─────────────────────────────────────────────────────
+let resend;
+if (process.env.RESEND_API_KEY) {
+  resend = new Resend(process.env.RESEND_API_KEY);
+  console.log("🟢 Resend API initialized.");
+}
 
-// Verify transport on startup
-transporter.verify((error, success) => {
+// ─────────────────────────────────────────────────────
+// ✅ SMTP CONFIGURATION (ZOHO FALLBACK)
+// ─────────────────────────────────────────────────────
+const createTransporter = (port) => {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST || "smtp.zoho.com",
+    port: port,
+    secure: port === 465, // SSL for 465, STARTTLS for 587/others
+    auth: {
+      user: process.env.SMTP_EMAIL,
+      pass: process.env.SMTP_PASSWORD
+    },
+    tls: { rejectUnauthorized: false },
+    connectionTimeout: 10000, // 10s connection timeout
+    greetingTimeout: 10000,
+    socketTimeout: 15000
+  });
+};
+
+// Initial transporter (prefers 465 if configured, otherwise 587)
+let transporter = createTransporter(parseInt(process.env.SMTP_PORT) || 587);
+
+// Verify SMTP on startup as a background check
+transporter.verify((error) => {
   if (error) {
-    console.error("🔥 SMTP Connection Error:", error.message);
+    console.warn(`⚠️ SMTP Connection Check (Port ${transporter.options.port}) failed: ${error.message}`);
   } else {
-    console.log("🟢 SMTP Server is ready (OTP capability active)");
+    console.log(`🟢 SMTP Server is ready (Port ${transporter.options.port})`);
   }
 });
 
+/**
+ * High-reliability email sender
+ * Prefers Resend API, falls back to SMTP (Zoho), then falls back to Port 587.
+ */
 const sendEmail = async (to, subject, html) => {
+  // 1️⃣ TRY RESEND (Preferred if key is set)
+  if (resend) {
+    try {
+      console.log(`📡 Sending via Resend to: ${to}`);
+      const { data, error } = await resend.emails.send({
+        from: "SJ Creativeworks <onboarding@resend.dev>", // ⚠️ Default onboarding domain
+        to: [to],
+        subject,
+        html
+      });
+
+      if (data && data.id) {
+        console.log("✅ Email sent via Resend:", data.id);
+        return true;
+      }
+
+      console.error("❌ Resend API Error:", error?.message || error);
+      console.log("🔄 Switching to SMTP fallback...");
+    } catch (e) {
+      console.error("❌ Resend exception:", e.message);
+      console.log("🔄 Switching to SMTP fallback...");
+    }
+  }
+
+  // 2️⃣ TRY PRIMARY SMTP (ZOHO)
   try {
-    console.log(`📡 Attempting to send email from ${process.env.SMTP_EMAIL} to: ${to}`);
-    
-    const info = await transporter.sendMail({
-      from: `"${process.env.SMTP_FROM_NAME || 'SJ Creativeworks'}" <${process.env.SMTP_EMAIL}>`,
+    console.log(`📡 Sending via SMTP to: ${to} (Port ${transporter.options.port})`);
+    await transporter.sendMail({
+      from: `"SJ Creativeworks" <${process.env.SMTP_EMAIL}>`,
       to,
       subject,
       html
     });
-    
-    console.log("✅ Email sent successfully:", info.messageId);
-    return info;
+    console.log("✅ Email sent via SMTP.");
+    return true;
   } catch (error) {
-    console.error("❌ Nodemailer Error Detail:", {
-      message: error.message,
-      code: error.code,
-      command: error.command,
-      response: error.response,
-      responseCode: error.responseCode
-    });
-    throw error;
+    // 3️⃣ TRY SMTP AUTO-FALLBACK (e.g. 465 -> 587)
+    if (transporter.options.port !== 587) {
+      console.warn(`⚠️ SMTP Port ${transporter.options.port} failed. Trying 587 fallback...`);
+      const fallbackTransporter = createTransporter(587);
+      try {
+        await fallbackTransporter.sendMail({
+          from: `"SJ Creativeworks" <${process.env.SMTP_EMAIL}>`,
+          to,
+          subject,
+          html
+        });
+        transporter = fallbackTransporter; // Upgrade global transporter for next time
+        console.log("✅ Email sent via SMTP Fallback (Port 587).");
+        return true;
+      } catch (fallbackError) {
+        console.error("❌ All email methods (Resend & SMTP) failed.");
+        console.error("Final Error Detail:", fallbackError.message);
+      }
+    } else {
+      console.error("❌ SMTP failed and no more fallbacks available.");
+    }
+    return false;
   }
 };
 

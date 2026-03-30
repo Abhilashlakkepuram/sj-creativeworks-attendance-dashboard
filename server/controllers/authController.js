@@ -123,30 +123,30 @@ const loginUser = async (req, res) => {
 
 const forgotPassword = async (req, res) => {
   const requestId = Math.random().toString(36).substring(7);
-  console.log(`[${requestId}] == FORGOT PASSWORD ATTEMPT == Payload:`, JSON.stringify(req.body));
-  
+  console.log(`[${requestId}] == FORGOT PASSWORD ==`, req.body);
+
   try {
     const { email } = req.body;
+
     if (!email) {
-      console.warn(`[${requestId}] ⚠️ No email provided in request body`);
-      return res.status(400).json({ message: "Email is required" });
+      return res.status(400).json({
+        success: false,
+        message: "Email is required"
+      });
     }
 
-    console.time(`[${requestId}] DB_FIND_USER`);
     const user = await User.findOne({ email });
-    console.timeEnd(`[${requestId}] DB_FIND_USER`);
 
     if (!user) {
-      console.warn(`[${requestId}] ❌ User not found: ${email}`);
       return res.status(404).json({
+        success: false,
         message: "User not found"
       });
     }
 
-    // Generate OTP
+    // 🔐 Generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Hash OTP
     const hashedOTP = crypto
       .createHash("sha256")
       .update(otp)
@@ -156,69 +156,57 @@ const forgotPassword = async (req, res) => {
     user.resetOTPExpires = Date.now() + 10 * 60 * 1000;
     user.resetAttempts = 0;
 
-    console.time(`[${requestId}] DB_SAVE_USER`);
     await user.save();
-    console.timeEnd(`[${requestId}] DB_SAVE_USER`);
 
+    console.log(`🔐 OTP for ${email}:`, otp); // remove later
 
-    const logoUrl = "https://sjcreativeworks.com/wp-content/uploads/2024/04/latestup-scaled.png"; // Replace with your actual hosted logo URL
-
+    // 🎨 Email HTML
     const html = `
-<div style="background-color: #f4f6f8; padding: 40px 15px; font-family: 'Segoe UI', Arial, sans-serif;">
-    <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e1e5ea; border-radius: 12px; overflow: hidden;">
-        <div style="padding: 30px; text-align: center; border-bottom: 1px solid #f0f2f5;">
-            <img src="${logoUrl}" alt="SJ Creativeworks" style="height: 40px; margin-bottom: 15px;">
-            <h2 style="color: #1a202c; margin: 0; font-size: 20px; font-weight: 700;">Password Reset Request</h2>
+    <div style="background:#f4f6f8;padding:40px;font-family:Arial;">
+      <div style="max-width:500px;margin:auto;background:#fff;padding:30px;border-radius:10px;">
+        <h2 style="color:#1F8B8D;text-align:center;">SJ Creativeworks</h2>
+        <p>Hello <strong>${user.name}</strong>,</p>
+        <p>Your OTP for password reset:</p>
+        <div style="text-align:center;margin:20px 0;">
+          <span style="font-size:32px;font-weight:bold;letter-spacing:5px;color:#1F8B8D;">
+            ${otp}
+          </span>
         </div>
-        <div style="padding: 40px 30px;">
-            <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 25px;">
-                Hello <strong>${user.name}</strong>,<br><br>
-                We received a request to reset your password. Use the verification code below to proceed:
-            </p>
-            <div style="background-color: #f8fafc; border: 2px dashed #e2e8f0; border-radius: 8px; padding: 25px; text-align: center; margin-bottom: 25px;">
-                <span style="font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #1F8B8D; font-family: monospace;">${otp}</span>
-            </div>
-            <p style="color: #718096; font-size: 13px; text-align: center;">
-                This code is valid for <strong>10 minutes</strong>.<br>
-                If you didn't request this, you can safely ignore this email.
-            </p>
-        </div>
-        <div style="padding: 20px; background-color: #fcfdfe; text-align: center; border-top: 1px solid #f0f2f5;">
-            <p style="font-size: 12px; color: #a0aec0; margin: 0;">
-                &copy; 2026 SJ Creativeworks. All rights reserved.
-            </p>
-        </div>
+        <p style="text-align:center;font-size:12px;color:#666;">
+          Valid for 10 minutes
+        </p>
+      </div>
     </div>
-</div>
-`;
+    `;
 
-    // 🔥 Resilient Email Sending: 
-    // Give the SMTP server up to 15 seconds to send before returning success.
-    // This keeps the process active while avoiding the 45s frontend timeout.
-    const emailPromise = sendEmail(email.trim(), "Password Reset OTP - SJ Creativeworks", html);
-    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve("TIMEOUT"), 15000));
+    // 📧 Send Email
+    const emailSent = await sendEmail(
+      email.trim(),
+      "Password Reset OTP - SJ Creativeworks",
+      html
+    );
 
-    const result = await Promise.race([emailPromise, timeoutPromise]);
-
-    if (result === "TIMEOUT") {
-      console.warn(`[${requestId}] ⚠️ Email sending is taking longer than 15s. Continuing in background...`);
-    } else {
-      console.log(`[${requestId}] ✅ Email flow completed successfully within grace period.`);
+    if (!emailSent) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send OTP email"
+      });
     }
 
-    // Return response
-    res.json({
-      message: "Password reset OTP sent to your email"
+    return res.json({
+      success: true,
+      message: "OTP sent successfully"
     });
 
   } catch (error) {
-    res.status(500).json({
-      message: "Server error",
-      error: error.message
+    console.error("❌ Forgot Password Error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
     });
   }
 };
-
 const resetPassword = async (req, res) => {
 
   try {
