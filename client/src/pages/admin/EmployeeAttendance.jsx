@@ -23,9 +23,20 @@ function EmployeeAttendance() {
 
             setData(attendanceData);
 
-            // Extract employee info from first record
-            if (attendanceData.length > 0) {
-                setEmployee(attendanceData[0].user);
+            // Robust employee info extraction
+            if (res.data.employee) {
+                setEmployee(res.data.employee);
+            } else {
+                // Fallback: fetch profile separately
+                try {
+                    const empRes = await api.get(`/admin/employee/${id}`);
+                    setEmployee(empRes.data);
+                } catch (profileErr) {
+                    // Final fallback to populated record if available
+                    if (attendanceData.length > 0 && attendanceData[0].user?.name) {
+                        setEmployee(attendanceData[0].user);
+                    }
+                }
             }
 
         } catch (err) {

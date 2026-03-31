@@ -121,6 +121,82 @@ const loginUser = async (req, res) => {
 
 };
 
+// const forgotPassword = async (req, res) => {
+
+//   try {
+
+//     const { email } = req.body;
+
+//     const user = await User.findOne({ email });
+
+//     if (!user) {
+//       return res.status(404).json({
+//         message: "User not found"
+//       });
+//     }
+
+//     // Generate OTP
+//     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+//     // Hash OTP
+//     const hashedOTP = crypto
+//       .createHash("sha256")
+//       .update(otp)
+//       .digest("hex");
+
+//     user.resetOTP = hashedOTP;
+//     user.resetOTPExpires = Date.now() + 10 * 60 * 1000;
+//     user.resetAttempts = 0;
+
+//     await user.save();
+
+
+//     const logoUrl = "https://sjcreativeworks.com/wp-content/uploads/2024/04/latestup-scaled.png"; // Replace with your actual hosted logo URL
+
+//     const html = `
+// <div style="background-color: #f4f6f8; padding: 40px 15px; font-family: 'Segoe UI', Arial, sans-serif;">
+//     <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e1e5ea; border-radius: 12px; overflow: hidden; shadow: 0 4px 6px rgba(0,0,0,0.05);">
+//         <div style="padding: 30px; text-align: center; border-bottom: 1px solid #f0f2f5;">
+//             <img src="${logoUrl}" alt="SJ Creativeworks" style="height: 40px; margin-bottom: 15px;">
+//             <h2 style="color: #1a202c; margin: 0; font-size: 20px; font-weight: 700;">Password Reset Request</h2>
+//         </div>
+//         <div style="padding: 40px 30px;">
+//             <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 25px;">
+//                 Hello <strong>${user.name}</strong>,<br><br>
+//                 We received a request to reset your password for the SJ Creativeworks Dashboard. Use the verification code below to proceed:
+//             </p>
+//             <div style="background-color: #f8fafc; border: 2px dashed #e2e8f0; border-radius: 8px; padding: 25px; text-align: center; margin-bottom: 25px;">
+//                 <span style="font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #1F8B8D; font-family: monospace;">${otp}</span>
+//             </div>
+//             <p style="color: #718096; font-size: 13px; text-align: center;">
+//                 This code is valid for <strong>10 minutes</strong>.<br>
+//                 If you didn't request this, you can safely ignore this email.
+//             </p>
+//         </div>
+//         <div style="padding: 20px; background-color: #fcfdfe; text-align: center; border-top: 1px solid #f0f2f5;">
+//             <p style="font-size: 12px; color: #a0aec0; margin: 0;">
+//                 &copy; 2026 SJ Creativeworks. All rights reserved.
+//             </p>
+//         </div>
+//     </div>
+// </div>
+// `;
+
+//     await sendEmail(email, "Reset Your SJ Creativeworks Password", html);
+
+//     res.json({
+//       message: "Password reset OTP sent to your email"
+//     });
+
+//   } catch (error) {
+//     res.status(500).json({
+//       message: "Server error",
+//       error: error.message
+//     });
+//   }
+// };
+
+
 const forgotPassword = async (req, res) => {
   const requestId = Math.random().toString(36).substring(7);
   console.log(`[${requestId}] == FORGOT PASSWORD ==`, req.body);
@@ -180,17 +256,28 @@ const forgotPassword = async (req, res) => {
     `;
 
     // 📧 Send Email
+<<<<<<< HEAD
     const emailResult = await sendEmail(
+=======
+    const emailSent = await sendEmail(
+>>>>>>> cb8a726 (fix routing for vercel)
       email.trim(),
       "Password Reset OTP - SJ Creativeworks",
       html
     );
 
+<<<<<<< HEAD
     if (emailResult.error) {
       return res.status(500).json({
         success: false,
         message: "Failed to send OTP email",
         error: emailResult.errorMessage
+=======
+    if (!emailSent) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send OTP email"
+>>>>>>> cb8a726 (fix routing for vercel)
       });
     }
 

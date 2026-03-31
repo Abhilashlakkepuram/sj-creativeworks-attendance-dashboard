@@ -13,7 +13,152 @@ const getTodayRangeHelper = () => {
     return { start, end };
 };
 
-// Get all approved employees with attendance stats
+// ─────────────────────────────────────────────────────────────────────────────
+// ✅ NEW: Auto-close missed punch-outs from previous days
+// Call this once per day via a cron job, or trigger it when admin views records.
+// Marks any record with punchIn but no punchOut (from previous days) as
+// missedPunchOut=true and sets workMinutes=0.
+// ─────────────────────────────────────────────────────────────────────────────
+const autoCloseMissedPunchOuts = async () => {
+    try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Find all records from before today that have punchIn but no punchOut
+        const missed = await Attendance.updateMany(
+            {
+                date: { $lt: today },
+                punchIn: { $exists: true, $ne: null },
+                punchOut: null,
+                missedPunchOut: { $ne: true } // don't re-process
+            },
+            {
+                $set: {
+                    missedPunchOut: true,
+                    workMinutes: 0
+                }
+            }
+        );
+
+        if (missed.modifiedCount > 0) {
+            console.log(`🕐 Auto-closed ${missed.modifiedCount} missed punch-outs`);
+        }
+    } catch (err) {
+        console.error("❌ autoCloseMissedPunchOuts error:", err.message);
+    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ✅ FIXED: getUserAttendance
+// Now fills in absent days between employee's first record and today,
+// so the admin sees a complete picture including absent days.
+// ─────────────────────────────────────────────────────────────────────────────
+const getUserAttendance = async (req, res) => {
+    try {
+        const userId = req.params.id;
+        const { page = 1, limit = 30 } = req.query;
+
+        // Auto-close any missed punch-outs before fetching
+        await autoCloseMissedPunchOuts();
+
+        // Fetch employee info
+        const employee = await User.findById(userId).select("name email createdAt").lean();
+        if (!employee) {
+            return res.status(404).json({ message: "Employee not found" });
+        }
+
+        // Fetch all existing DB records for this employee (no limit — we need all to fill gaps)
+        const existingRecords = await Attendance.find({ user: userId })
+            .sort({ date: -1 })
+            .lean();
+
+        // Build a map of date → record for quick lookup
+        const recordMap = {};
+        existingRecords.forEach(r => {
+            const key = new Date(r.date).toISOString().split("T")[0];
+            recordMap[key] = r;
+        });
+
+        // Determine date range: from employee's join date (or first record) to today
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const joinDate = new Date(employee.createdAt);
+        joinDate.setHours(0, 0, 0, 0);
+
+        // Start from earliest: either first attendance record or join date
+        const firstRecord = existingRecords.length > 0
+            ? new Date(existingRecords[existingRecords.length - 1].date)
+            : joinDate;
+        firstRecord.setHours(0, 0, 0, 0);
+
+        // Build complete day-by-day list from firstRecord to today
+        const allDays = [];
+        const cursor = new Date(today);
+
+        while (cursor >= firstRecord) {
+            const key = cursor.toISOString().split("T")[0];
+            const dayOfWeek = cursor.getDay(); // 0 = Sunday, 6 = Saturday
+
+            if (recordMap[key]) {
+                // Real record exists — use it
+                allDays.push(recordMap[key]);
+            } else {
+                // No record — mark as absent (skip Sundays if your office is closed)
+                // Remove the Sunday check below if your office works on Sundays
+                if (dayOfWeek !== 0) { // 0 = Sunday (optional: add 6 for Saturday too)
+                    allDays.push({
+                        _id: `absent-${userId}-${key}`,
+                        user: userId,
+                        date: new Date(cursor),
+                        punchIn: null,
+                        punchOut: null,
+                        workMinutes: 0,
+                        status: "absent",
+                        isLate: false,
+                        missedPunchOut: false,
+                        isVirtual: true // flag: this record doesn't exist in DB
+                    });
+                }
+            }
+
+            cursor.setDate(cursor.getDate() - 1);
+        }
+
+        // Paginate
+        const total = allDays.length;
+        const skip = (Number(page) - 1) * Number(limit);
+        const paginated = allDays.slice(skip, skip + Number(limit));
+
+        res.json({
+            data: paginated,
+            total,
+            page: Number(page),
+            totalPages: Math.ceil(total / Number(limit)),
+            employee: {
+                _id: employee._id,
+                name: employee.name,
+                email: employee.email
+            },
+            // Summary stats across ALL days (not just current page)
+            summary: {
+                total: allDays.length,
+                present: allDays.filter(d => d.status === "present").length,
+                late: allDays.filter(d => d.status === "late").length,
+                absent: allDays.filter(d => d.status === "absent").length,
+                missedPunchOut: allDays.filter(d => d.missedPunchOut).length,
+            }
+        });
+
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// All other existing functions below — unchanged
+// ─────────────────────────────────────────────────────────────────────────────
+
 const getEmployees = async (req, res) => {
     console.log("== GET EMPLOYEES CALLED ==");
     try {
@@ -69,8 +214,6 @@ const getEmployees = async (req, res) => {
                     }
                 }
             },
-            // --- FIX APPLIED HERE ---
-            // 1. Add the computed fields based on todayRecord
             {
                 $addFields: {
                     todayStatus: { $ifNull: ["$todayRecord.status", "absent"] },
@@ -78,15 +221,9 @@ const getEmployees = async (req, res) => {
                     punchOut: "$todayRecord.punchOut"
                 }
             },
-            // 2. Remove the sensitive or bulky data you don't want to send to the client
             {
-                $unset: [
-                    "password",
-                    "attendance",
-                    "todayRecord" // Optional: removes the raw record since we extracted the fields we need
-                ]
+                $unset: ["password", "attendance", "todayRecord"]
             },
-            // ------------------------
             { $skip: skip },
             { $limit: limitNum }
         ]);
@@ -107,216 +244,115 @@ const getEmployees = async (req, res) => {
     }
 };
 
-// Add New Employee
 const addEmployee = async (req, res) => {
     try {
         const { name, email, password, role } = req.body;
         const existingUser = await User.findOne({ email });
-        if (existingUser) {
-            return res.status(400).json({ message: "User already exists" });
-        }
+        if (existingUser) return res.status(400).json({ message: "User already exists" });
         const hashedPassword = await bcrypt.hash(password, 10);
-        const user = new User({
-            name,
-            email,
-            password: hashedPassword,
-            role,
-            isApproved: true
-        });
+        const user = new User({ name, email, password: hashedPassword, role, isApproved: true });
         await user.save();
-
-        // 🚀 Real-time Update
         req.app.get("io").emit("dashboard-update");
-
         res.status(201).json({ message: "Employee added successfully" });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
 
-// Update Employee Details
 const updateEmployee = async (req, res) => {
     try {
         const { name, email, role } = req.body;
         await User.findByIdAndUpdate(req.params.id, { name, email, role });
-
-        // 🚀 Real-time Update
         req.app.get("io").emit("dashboard-update");
-
         res.json({ message: "Employee updated successfully" });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
 
-// Delete Employee
 const deleteEmployee = async (req, res) => {
     try {
         await User.findByIdAndDelete(req.params.id);
-
-        // 🚀 Real-time Update
         req.app.get("io").emit("dashboard-update");
-
         res.json({ message: "Employee deleted successfully" });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
 
-// Toggle Block/Unblock User
 const toggleBlockUser = async (req, res) => {
     try {
         const user = await User.findById(req.params.id);
         if (!user) return res.status(404).json({ message: "User not found" });
         user.isBlocked = !user.isBlocked;
         await user.save();
-
-        // 🚀 Real-time Update
         req.app.get("io").emit("dashboard-update");
-
         res.json({ message: `User ${user.isBlocked ? "blocked" : "unblocked"} successfully` });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
 
-// Get Single Employee Profile
 const getEmployeeProfile = async (req, res) => {
     try {
         const user = await User.findById(req.params.id).select("-password");
-        if (!user) {
-            return res.status(404).json({ message: "Employee not found" });
-        }
+        if (!user) return res.status(404).json({ message: "Employee not found" });
         res.json(user);
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
 
-// Get all pending employees
 const getPendingUsers = async (req, res) => {
-
     try {
-
-        const users = await User.find({
-            isApproved: false,
-            role: { $ne: "admin" }
-        }).select("-password");
-
+        const users = await User.find({ isApproved: false, role: { $ne: "admin" } }).select("-password");
         res.json(users);
-
     } catch (error) {
-
-        res.status(500).json({
-            message: "Server error",
-            error: error.message
-        });
-
+        res.status(500).json({ message: "Server error", error: error.message });
     }
-
 };
 
-
-// Approve employee
 const approveUser = async (req, res) => {
-
     try {
-
         const user = await User.findById(req.params.id);
-
-        if (!user) {
-            return res.status(404).json({
-                message: "User not found"
-            });
-        }
-
-        // prevent approving admin
-        if (user.role === "admin") {
-            return res.status(403).json({
-                message: "Admins cannot be approved through this API"
-            });
-        }
-
-        // prevent approving again
-        if (user.isApproved) {
-            return res.status(400).json({
-                message: "User already approved"
-            });
-        }
-
+        if (!user) return res.status(404).json({ message: "User not found" });
+        if (user.role === "admin") return res.status(403).json({ message: "Admins cannot be approved through this API" });
+        if (user.isApproved) return res.status(400).json({ message: "User already approved" });
         user.isApproved = true;
-
         await user.save();
-
-        // 🚀 Real-time Update
         req.app.get("io").emit("dashboard-update");
-
-        res.json({
-            message: "User approved successfully"
-        });
-
+        res.json({ message: "User approved successfully" });
     } catch (error) {
-
-        res.status(500).json({
-            message: "Server error",
-            error: error.message
-        });
-
+        res.status(500).json({ message: "Server error", error: error.message });
     }
-
 };
+
 const rejectUser = async (req, res) => {
     try {
         const user = await User.findById(req.params.id);
-
-        if (!user) {
-            return res.status(404).json({
-                message: "User not found"
-            });
-        }
-
-        // prevent rejecting admin
-        if (user.role === "admin") {
-            return res.status(403).json({
-                message: "Admins cannot be rejected through this API"
-            });
-        }
-
+        if (!user) return res.status(404).json({ message: "User not found" });
+        if (user.role === "admin") return res.status(403).json({ message: "Admins cannot be rejected through this API" });
         await User.findByIdAndDelete(req.params.id);
-
-        // 🚀 Real-time Update
         req.app.get("io").emit("dashboard-update");
-
-        res.json({
-            message: "User request rejected and removed"
-        });
-
+        res.json({ message: "User request rejected and removed" });
     } catch (error) {
-        res.status(500).json({
-            message: "Server error",
-            error: error.message
-        });
+        res.status(500).json({ message: "Server error", error: error.message });
     }
 };
 
 const getAllAttendance = async (req, res) => {
     try {
         const { status, date, search, page = 1, limit = 10 } = req.query;
-
         const skip = (page - 1) * limit;
-
         let filter = {};
 
-        // 📅 DATE FILTER
         if (date) {
             const selectedDate = new Date(date);
             const start = new Date(selectedDate.setHours(0, 0, 0, 0));
             const end = new Date(selectedDate.setHours(23, 59, 59, 999));
-
             filter.date = { $gte: start, $lte: end };
         }
 
-        // 🔍 SEARCH FILTER (name/email)
         let userFilter = {};
         if (search) {
             userFilter = {
@@ -327,16 +363,9 @@ const getAllAttendance = async (req, res) => {
             };
         }
 
-        // 🧠 STATUS FILTER (IMPORTANT LOGIC)
-        if (status === "present") {
-            filter.status = { $in: ["present", "late"] }; // include late
-        }
+        if (status === "present") filter.status = { $in: ["present", "late"] };
+        if (status === "late") filter.status = "late";
 
-        if (status === "late") {
-            filter.status = "late";
-        }
-
-        // 📅 DATE RANGE FOR ABSENT LOGIC
         let datesToCheck = [];
         if (date) {
             const d = new Date(date);
@@ -345,9 +374,10 @@ const getAllAttendance = async (req, res) => {
                 end: new Date(d.setHours(23, 59, 59, 999))
             });
         } else {
-            // Find earliest date according to DB
             const firstRecord = await Attendance.findOne().sort({ date: 1 });
-            const startDate = firstRecord ? new Date(firstRecord.date) : new Date(new Date().setDate(new Date().getDate() - 30));
+            const startDate = firstRecord
+                ? new Date(firstRecord.date)
+                : new Date(new Date().setDate(new Date().getDate() - 30));
 
             const today = new Date();
             let current = new Date(today);
@@ -365,18 +395,15 @@ const getAllAttendance = async (req, res) => {
             }
         }
 
-        // 🔴 ABSENT LOGIC (SPECIAL CASE)
         if (status === "absent") {
             let allAbsentRecords = [];
 
-            // Get all candidate users once
             const candidates = await User.find({
                 ...userFilter,
                 role: { $ne: "admin" },
                 isApproved: true
             }).select("name email role").lean();
 
-            // Pre-fetch all relevant attendances for the requested date range to avoid N queries
             const rangeStart = datesToCheck[datesToCheck.length - 1].start;
             const rangeEnd = datesToCheck[0].end;
 
@@ -384,149 +411,63 @@ const getAllAttendance = async (req, res) => {
                 date: { $gte: rangeStart, $lte: rangeEnd }
             }).select("user date").lean();
 
-            // Create a date-based lookup map for faster checking
             const presenceMap = {};
             existingAttendances.forEach(a => {
-                const dateKey = a.date.toISOString().split('T')[0];
+                const dateKey = a.date.toISOString().split("T")[0];
                 if (!presenceMap[dateKey]) presenceMap[dateKey] = new Set();
                 presenceMap[dateKey].add(a.user.toString());
             });
 
             for (const range of datesToCheck) {
-                const dateKey = range.start.toISOString().split('T')[0];
+                const dateKey = range.start.toISOString().split("T")[0];
                 const presentSet = presenceMap[dateKey] || new Set();
-
                 const absentForThisDay = candidates.filter(u => !presentSet.has(u._id.toString()));
 
-                const dailyRecords = absentForThisDay.map(u => ({
-                    _id: `absent-${u._id}-${range.start.toISOString()}`,
-                    user: {
-                        _id: u._id,
-                        name: u.name,
-                        email: u.email,
-                        role: u.role
-                    },
-                    status: "absent",
-                    date: range.start,
-                    punchIn: null,
-                    punchOut: null,
-                    workHours: "0.00"
-                }));
-
-                allAbsentRecords = allAbsentRecords.concat(dailyRecords);
+                allAbsentRecords = allAbsentRecords.concat(
+                    absentForThisDay.map(u => ({
+                        _id: `absent-${u._id}-${range.start.toISOString()}`,
+                        user: { _id: u._id, name: u.name, email: u.email, role: u.role },
+                        status: "absent",
+                        date: range.start,
+                        punchIn: null,
+                        punchOut: null,
+                        workHours: "0.00"
+                    }))
+                );
             }
 
-            // Pagination for absent (client side pagination simulation)
             const total = allAbsentRecords.length;
             const paginated = allAbsentRecords.slice(skip, skip + parseInt(limit));
-
-            return res.json({
-                success: true,
-                data: paginated,
-                total,
-                page: Number(page),
-                totalPages: Math.ceil(total / limit)
-            });
+            return res.json({ success: true, data: paginated, total, page: Number(page), totalPages: Math.ceil(total / limit) });
         }
 
-        // ✅ NORMAL QUERY (Present/Late/All)
         const attendance = await Attendance.find(filter)
-            .populate({
-                path: "user",
-                match: userFilter,
-                select: "name email role"
-            })
+            .populate({ path: "user", match: userFilter, select: "name email role" })
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(parseInt(limit));
 
-        // Remove null users (after search filter)
         const filtered = attendance.filter(a => a.user !== null);
-
-        // If status is "all" and it's for Today, we should ideally merge absent too...
-        // But for now, we'll keep the existing logic and just ensure names show up in "Absent" view.
-
         const total = await Attendance.countDocuments(filter);
 
-        res.json({
-            success: true,
-            data: filtered,
-            total,
-            page: Number(page),
-            totalPages: Math.ceil(total / limit)
-        });
+        res.json({ success: true, data: filtered, total, page: Number(page), totalPages: Math.ceil(total / limit) });
 
     } catch (error) {
-        res.status(500).json({
-            message: "Server error",
-            error: error.message
-        });
-    }
-};
-const getUserAttendance = async (req, res) => {
-    try {
-        const userId = req.params.id;
-        const { page = 1, limit = 10 } = req.query;
-
-        const skip = (page - 1) * limit;
-
-        const attendance = await Attendance.find({ user: userId })
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(parseInt(limit));
-
-        const total = await Attendance.countDocuments({ user: userId });
-
-        res.json({
-            data: attendance,
-            total,
-            page: Number(page),
-            totalPages: Math.ceil(total / limit)
-        });
-
-    } catch (error) {
-        res.status(500).json({
-            message: "Server error",
-            error: error.message
-        });
+        res.status(500).json({ message: "Server error", error: error.message });
     }
 };
 
 const getDashboardStats = async (req, res) => {
-
     try {
-
-        const totalEmployees = await User.countDocuments({
-            role: { $ne: "admin" }
-        });
-
+        const totalEmployees = await User.countDocuments({ role: { $ne: "admin" } });
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-
-        const todayAttendance = await Attendance.countDocuments({
-            date: today
-        });
-
-        const lateEmployees = await Attendance.countDocuments({
-            date: today,
-            status: "late"
-        });
-
-        res.json({
-            totalEmployees,
-            todayAttendance,
-            lateEmployees
-        });
-
+        const todayAttendance = await Attendance.countDocuments({ date: today });
+        const lateEmployees = await Attendance.countDocuments({ date: today, status: "late" });
+        res.json({ totalEmployees, todayAttendance, lateEmployees });
     } catch (error) {
-
-        res.status(500).json({
-            message: "Server error",
-            error: error.message
-        });
-
+        res.status(500).json({ message: "Server error", error: error.message });
     }
-
 };
 
 module.exports = {
@@ -541,5 +482,6 @@ module.exports = {
     updateEmployee,
     deleteEmployee,
     toggleBlockUser,
-    getEmployeeProfile
+    getEmployeeProfile,
+    autoCloseMissedPunchOuts
 };

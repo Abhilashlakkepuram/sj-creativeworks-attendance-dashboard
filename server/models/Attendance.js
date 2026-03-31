@@ -28,21 +28,27 @@ const attendanceSchema = new mongoose.Schema({
     default: 0
   },
 
+  // ✅ Added "absent" to enum
   status: {
     type: String,
-    enum: ["present", "late"],
+    enum: ["present", "late", "absent"],
     default: "present"
   },
 
   isLate: {
     type: Boolean,
     default: false
+  },
+
+  // ✅ New: flags employee forgot to punch out
+  missedPunchOut: {
+    type: Boolean,
+    default: false
   }
 
 }, { timestamps: true });
 
-
-// Compound Index (very important)
+// Compound Index
 attendanceSchema.index({ user: 1, date: 1 }, { unique: true });
 
 module.exports = mongoose.model("Attendance", attendanceSchema);

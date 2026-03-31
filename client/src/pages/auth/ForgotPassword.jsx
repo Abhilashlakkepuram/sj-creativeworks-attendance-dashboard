@@ -17,16 +17,23 @@ const ForgotPassword = () => {
         setLoading(true);
         setErrorMsg("");
         setSuccessMsg("");
+
         try {
             const res = await api.post("/auth/forgot-password", { email });
+
             setSuccessMsg(res.data.message || "OTP sent to your email.");
-            // Store email in sessionStorage for the reset page
             sessionStorage.setItem("resetEmail", email);
-            setTimeout(() => {
-                navigate("/reset-password");
-            }, 2000);
+            setTimeout(() => navigate("/reset-password"), 2000);
         } catch (error) {
-            setErrorMsg(error.response?.data?.message || "Failed to send OTP. Please try again.");
+            if (error.code === "ECONNABORTED") {
+                setErrorMsg(
+                    "Server is taking too long. Your OTP may still be sent — check your email, or try again."
+                );
+            } else {
+                setErrorMsg(
+                    error.response?.data?.message || "Failed to send OTP. Please try again."
+                );
+            }
         } finally {
             setLoading(false);
         }
@@ -34,11 +41,11 @@ const ForgotPassword = () => {
 
     return (
         <div className="min-h-screen flex bg-slate-50 relative overflow-hidden">
+            {/* Left panel */}
             <div className="hidden lg:flex lg:w-1/2 relative bg-slate-900 overflow-hidden text-white flex-col justify-center items-center p-12">
-                <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-primary-600 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob"></div>
-                <div className="absolute top-[10%] right-[-10%] w-96 h-96 bg-secondary-500 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-2000"></div>
-                <div className="absolute bottom-[-10%] left-[20%] w-96 h-96 bg-primary-400 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000"></div>
-
+                <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-primary-600 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob" />
+                <div className="absolute top-[10%] right-[-10%] w-96 h-96 bg-secondary-500 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-2000" />
+                <div className="absolute bottom-[-10%] left-[20%] w-96 h-96 bg-primary-400 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000" />
                 <div className="relative z-10 text-center w-full max-w-lg">
                     <div className="w-24 h-24 bg-white/10 backdrop-blur-lg rounded-2xl flex items-center justify-center mx-auto mb-8 border border-white/20 shadow-xl shadow-primary-500/20 p-2 overflow-hidden">
                         <img src={logo} alt="SJ Creativeworks Logo" className="w-full h-full object-contain drop-shadow-md" />
@@ -50,8 +57,10 @@ const ForgotPassword = () => {
                 </div>
             </div>
 
+            {/* Right panel */}
             <div className="w-full lg:w-1/2 flex items-center justify-center p-8 sm:p-12 relative z-10 bg-white md:rounded-l-3xl shadow-[-10px_0_30px_-15px_rgba(0,0,0,0.1)]">
                 <div className="w-full max-w-md">
+                    {/* Mobile logo */}
                     <div className="lg:hidden flex justify-center mb-6">
                         <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-primary-600/20 p-2 border border-slate-100">
                             <img src={logo} alt="SJ Logo" className="w-full h-full object-contain" />
@@ -64,6 +73,7 @@ const ForgotPassword = () => {
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-6">
+                        {/* Error */}
                         {errorMsg && (
                             <div className="p-3 bg-red-50 text-red-600 text-sm font-medium rounded-lg border border-red-100 flex items-start gap-2">
                                 <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -72,6 +82,8 @@ const ForgotPassword = () => {
                                 {errorMsg}
                             </div>
                         )}
+
+                        {/* Success */}
                         {successMsg && (
                             <div className="p-3 bg-emerald-50 text-emerald-600 text-sm font-medium rounded-lg border border-emerald-100 flex items-start gap-2">
                                 <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -81,18 +93,25 @@ const ForgotPassword = () => {
                             </div>
                         )}
 
+
+
                         <Input
                             label="Email Address"
                             type="email"
                             name="email"
-                            placeholder="you@creativeworks.com"
+                            placeholder="you@sjcreativeworks.com"
                             onChange={(e) => setEmail(e.target.value)}
                             value={email}
                             required
+                            disabled={loading}
                         />
 
-                        <Button type="submit" className="w-full h-11 text-base shadow-primary-600/10" disabled={loading}>
-                            {loading ? "Sending..." : "Send OTP"}
+                        <Button
+                            type="submit"
+                            className="w-full h-11 text-base shadow-primary-600/10"
+                            disabled={loading}
+                        >
+                            {loading ? "Sending…" : "Send OTP"}
                         </Button>
                     </form>
 

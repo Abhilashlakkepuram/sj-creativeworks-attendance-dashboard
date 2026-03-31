@@ -12,10 +12,13 @@ const getBaseURL = () => {
 const api = axios.create({
     baseURL: getBaseURL(),
     withCredentials: true,
+<<<<<<< HEAD
     timeout: 45000, // Increased to 45s to handle Render cold starts + email delays
+=======
+    timeout: 30000, // 30s — handles Render cold starts
+>>>>>>> cb8a726 (fix routing for vercel)
 });
 
-// Add a request interceptor
 api.interceptors.request.use(
     (config) => {
         const fullURL = config.baseURL ? `${config.baseURL}${config.url}` : config.url;
@@ -32,13 +35,13 @@ api.interceptors.request.use(
     }
 );
 
-// Add a response interceptor
 api.interceptors.response.use(
     (response) => {
         console.log(`✅ Response: ${response.status} from ${response.config.url}`);
         return response;
     },
     (error) => {
+<<<<<<< HEAD
         const status = error.response?.status || 'Network Error';
         const url = error.config?.url || 'unknown URL';
         const message = error.message || 'No additional error info';
@@ -48,6 +51,11 @@ api.interceptors.response.use(
             console.warn("⚠️ This might be a CORS error, a timeout, or the server might be waking up from sleep.");
         }
 
+=======
+        console.error(
+            `❌ Response Error: ${error.response?.status || "Network Error"} from ${error.config?.url}`
+        );
+>>>>>>> cb8a726 (fix routing for vercel)
         return Promise.reject(error);
     }
 );
