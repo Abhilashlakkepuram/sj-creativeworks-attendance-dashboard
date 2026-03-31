@@ -1,9 +1,25 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import api from "../../config/axiosConfig";
 import { useNavigate, Link } from "react-router-dom";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
 import logo from "../../assets/sj-logo.png";
+
+// ── Password Strength Helper ──────────────────────────────────────────
+const getPasswordStrength = (password) => {
+    const checks = {
+        length: password.length >= 8,
+        number: /[0-9]/.test(password),
+        special: /[!@#$%^&*]/.test(password),
+        upper: /[A-Z]/.test(password),
+    };
+    const score = Object.values(checks).filter(Boolean).length;
+    return { checks, score };
+};
+
+const strengthLabels = ["", "Weak", "Fair", "Good", "Strong"];
+const strengthColors = ["", "bg-red-500", "bg-orange-400", "bg-yellow-400", "bg-emerald-500"];
+const strengthTextColors = ["", "text-red-500", "text-orange-400", "text-yellow-500", "text-emerald-600"];
 
 function Register() {
     const navigate = useNavigate();
@@ -20,6 +36,9 @@ function Register() {
     const [errorMsg, setErrorMsg] = useState("");
     const [notification, setNotification] = useState(null);
 
+    const { checks, score } = useMemo(() => getPasswordStrength(formData.password), [formData.password]);
+    const passwordsMatch = formData.confirmPassword && formData.password === formData.confirmPassword;
+
     const showNotification = (msg, type = "success") => {
         setNotification({ msg, type });
         setTimeout(() => setNotification(null), 4000);
@@ -34,9 +53,16 @@ function Register() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (formData.password !== formData.confirmPassword) {
             setErrorMsg("Passwords do not match");
+            return;
+        }
+
+        // Enforce strong password on frontend too
+        const strongRegex = /^(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,}$/;
+        if (!strongRegex.test(formData.password)) {
+            setErrorMsg("Password must be at least 8 characters and include an uppercase letter, a number, and a special character (!@#$%^&*)");
             return;
         }
 
@@ -159,24 +185,85 @@ function Register() {
                             required
                         />
 
-                        <Input
-                            label="Secure Password"
-                            type="password"
-                            name="password"
-                            placeholder="Create a strong password"
-                            onChange={handleChange}
-                            value={formData.password}
-                            required
-                        />
-                        <Input
-                            label="Confirm Password"
-                            type="password"
-                            name="confirmPassword"
-                            placeholder="Confirm your password"
-                            onChange={handleChange}
-                            value={formData.confirmPassword}
-                            required
-                        />
+                        {/* Password field + Strength Meter */}
+                        <div>
+                            <Input
+                                label="Secure Password"
+                                type="password"
+                                name="password"
+                                placeholder="Create a strong password"
+                                onChange={handleChange}
+                                value={formData.password}
+                                required
+                            />
+
+                            {/* Strength Bar */}
+                            {formData.password && (
+                                <div className="mt-2 space-y-2">
+                                    <div className="flex gap-1">
+                                        {[1, 2, 3, 4].map((i) => (
+                                            <div
+                                                key={i}
+                                                className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${i <= score ? strengthColors[score] : "bg-slate-200"}`}
+                                            />
+                                        ))}
+                                    </div>
+                                    <p className={`text-xs font-semibold ${strengthTextColors[score]}`}>
+                                        {strengthLabels[score]}
+                                    </p>
+
+                                    {/* Requirement Checklist */}
+                                    <ul className="space-y-1 mt-1">
+                                        {[
+                                            { key: "length", label: "At least 8 characters" },
+                                            { key: "upper", label: "One uppercase letter (A–Z)" },
+                                            { key: "number", label: "One number (0–9)" },
+                                            { key: "special", label: "One special character (!@#$%^&*)" },
+                                        ].map(({ key, label }) => (
+                                            <li key={key} className={`flex items-center gap-1.5 text-xs transition-colors duration-200 ${checks[key] ? "text-emerald-600" : "text-slate-400"}`}>
+                                                {checks[key] ? (
+                                                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                ) : (
+                                                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                )}
+                                                {label}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Confirm Password + Match Indicator */}
+                        <div>
+                            <Input
+                                label="Confirm Password"
+                                type="password"
+                                name="confirmPassword"
+                                placeholder="Confirm your password"
+                                onChange={handleChange}
+                                value={formData.confirmPassword}
+                                required
+                            />
+                            {formData.confirmPassword && (
+                                <p className={`mt-1.5 text-xs font-medium flex items-center gap-1.5 ${passwordsMatch ? "text-emerald-600" : "text-red-500"}`}>
+                                    {passwordsMatch ? (
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    ) : (
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    )}
+                                    {passwordsMatch ? "Passwords match" : "Passwords do not match"}
+                                </p>
+                            )}
+                        </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1.5">
                                 Department Role
@@ -204,7 +291,7 @@ function Register() {
                         <Button
                             type="submit"
                             className="w-full h-11 mt-4 text-base shadow-primary-600/10"
-                            disabled={loading}
+                            disabled={loading || score < 4 || !passwordsMatch || !formData.role}
                         >
                             {loading ? "Submitting application..." : "Apply"}
                         </Button>

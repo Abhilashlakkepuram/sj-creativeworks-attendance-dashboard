@@ -7,15 +7,20 @@ const sendEmail = require("../services/emailService");
 
 const registerUser = async (req, res) => {
   console.log("== REGISTER USER CALLED ==");
-  console.log("User object type:", typeof User);
-  console.log("User properties:", typeof User === 'object' || typeof User === 'function' ? Object.keys(User) : null);
-  console.log("User itself:", User);
 
   try {
     const { name, email, password, confirmPassword, role } = req.body;
 
     if (password !== confirmPassword) {
       return res.status(400).json({ message: "Passwords do not match" });
+    }
+
+    // ── Strong password validation (must match frontend strength meter) ──
+    const passwordRegex = /^(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,}$/;
+    if (!passwordRegex.test(password)) {
+      return res.status(400).json({
+        message: "Password must be at least 8 characters and include an uppercase letter, a number, and a special character (!@#$%^&*)"
+      });
     }
 
     // check if user already exists
@@ -46,11 +51,13 @@ const registerUser = async (req, res) => {
 
     await user.save();
 
-    // 🔥 Get socket instance
     const io = req.app.get("io");
 
-    // 🔔 Notify admins (existing function)
-    await notifyAdmins(req.app, "registration", `New employee registration: ${name} (${role})`);
+    await notifyAdmins(
+      req.app,
+      "registration",
+      `New employee registration: ${name} (${role})`
+    );
 
     io.emit("dashboard-update");
 
