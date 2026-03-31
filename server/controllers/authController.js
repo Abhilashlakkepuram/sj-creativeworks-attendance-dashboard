@@ -256,28 +256,17 @@ const forgotPassword = async (req, res) => {
     `;
 
     // 📧 Send Email
-<<<<<<< HEAD
     const emailResult = await sendEmail(
-=======
-    const emailSent = await sendEmail(
->>>>>>> cb8a726 (fix routing for vercel)
       email.trim(),
       "Password Reset OTP - SJ Creativeworks",
       html
     );
 
-<<<<<<< HEAD
     if (emailResult.error) {
       return res.status(500).json({
         success: false,
         message: "Failed to send OTP email",
         error: emailResult.errorMessage
-=======
-    if (!emailSent) {
-      return res.status(500).json({
-        success: false,
-        message: "Failed to send OTP email"
->>>>>>> cb8a726 (fix routing for vercel)
       });
     }
 
