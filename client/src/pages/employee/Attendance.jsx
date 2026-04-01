@@ -71,13 +71,20 @@ function EmployeeAttendance() {
   const fetchData = async (pg = 1) => {
     try {
       setLoading(true);
-      const res = await api.get(`/admin/attendance/user/${id}`, {
+      const endpoint = id ? `/admin/attendance/user/${id}` : "/attendance/my-attendance";
+      const res = await api.get(endpoint, {
         params: { page: pg, limit: LIMIT }
       });
-      const { data: records, employee: emp, summary: sum, totalPages: tp, total: t } = res.data;
 
-      setData(records || []);
-      
+      const payload = res.data;
+      const records = payload.data || (Array.isArray(payload) ? payload : []);
+      const emp = payload.employee;
+      const sum = payload.summary;
+      const tp = payload.totalPages;
+      const t = payload.total;
+
+      setData(records);
+
       if (emp) {
         setEmployee(emp);
       } else if (id) {
@@ -275,7 +282,7 @@ function EmployeeAttendance() {
                         {isAbsent ? (
                           <span className="text-slate-300">—</span>
                         ) : d.missedPunchOut ? (
-                          <span className="text-orange-500 font-semibold text-xs">Not recorded</span>
+                          <span className="text-orange-500 font-semibold text-xs">Auto-Closed</span>
                         ) : (
                           formatTime(d.punchOut)
                         )}

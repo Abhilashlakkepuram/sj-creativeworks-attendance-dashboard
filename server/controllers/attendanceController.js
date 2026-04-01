@@ -89,7 +89,7 @@ const punchIn = async (req, res) => {
         const user = await User.findById(userId);
 
         await notifyAdmins(req.app, "attendance", `${user?.name || "Employee"} has punched in (${status})`);
-        
+
         // 🚀 Real-time Update
         req.app.get("io").emit("dashboard-update");
         req.app.get("io").emit("attendance-update");
@@ -108,6 +108,99 @@ const punchIn = async (req, res) => {
 };
 
 // Punch Out
+// const punchOut = async (req, res) => {
+//     try {
+//         const userId = req.user.id;
+//         const { location } = req.body || {};
+
+//         if (!location) {
+//             return res.status(400).json({ message: "Location required" });
+//         }
+
+//         const officeLat = parseFloat(process.env.OFFICE_LAT);
+//         const officeLng = parseFloat(process.env.OFFICE_LNG);
+//         const maxDistance = parseInt(process.env.MAX_DISTANCE_METERS) || 150;
+
+//         const distance = getDistance(
+//             location.lat,
+//             location.lng,
+//             officeLat,
+//             officeLng
+//         );
+//         console.log("Distance:", distance);
+//         console.log(officeLat, officeLng);
+//         console.log(location.lat, location.lng);
+
+//         if (distance > maxDistance) {
+//             return res.status(403).json({
+//                 message: `You are not in office location (${Math.round(distance)}m away)`,
+//             });
+//         }
+
+//         // ❌ IP VALIDATION DISABLED (Using GPS only)
+//         /*
+//         const rawIP =
+//             req.headers['x-forwarded-for']?.split(',')[0] ||
+//             req.socket.remoteAddress ||
+//             req.ip;
+
+//         const cleanIP = rawIP.replace('::ffff:', '');
+
+//         if (!["127.0.0.1", "::1"].includes(cleanIP)) {
+//             if (process.env.OFFICE_IP && cleanIP !== process.env.OFFICE_IP) {
+//                 return res.status(403).json({
+//                     message: `Connect to office network`,
+//                 });
+//             }
+//         }
+//         */
+
+//         const { start, end } = getTodayRange();
+
+//         const attendance = await Attendance.findOne({
+//             user: userId,
+//             date: { $gte: start, $lte: end }
+//         });
+
+//         if (!attendance) {
+//             return res.status(400).json({
+//                 message: "You have not punched in today"
+//             });
+//         }
+
+//         if (attendance.punchOut) {
+//             return res.status(400).json({
+//                 message: "You already punched out today"
+//             });
+//         }
+
+//         const now = new Date();
+//         attendance.punchOut = now;
+
+//         const diff = now - attendance.punchIn;
+//         const minutes = Math.floor(diff / (1000 * 60));
+
+//         attendance.workMinutes = Math.max(0, minutes);
+
+//         await attendance.save();
+
+//         // 🚀 Real-time Update
+//         req.app.get("io").emit("dashboard-update");
+//         req.app.get("io").emit("attendance-update");
+
+//         res.json({
+//             message: "Punch out successful",
+//             attendance
+//         });
+
+//     } catch (error) {
+//         res.status(500).json({
+//             message: "Server error",
+//             error: error.message
+//         });
+//     }
+// };
+
 const punchOut = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -127,33 +220,12 @@ const punchOut = async (req, res) => {
             officeLat,
             officeLng
         );
-        console.log("Distance:", distance);
-        console.log(officeLat, officeLng);
-        console.log(location.lat, location.lng);
 
         if (distance > maxDistance) {
             return res.status(403).json({
                 message: `You are not in office location (${Math.round(distance)}m away)`,
             });
         }
-
-        // ❌ IP VALIDATION DISABLED (Using GPS only)
-        /*
-        const rawIP =
-            req.headers['x-forwarded-for']?.split(',')[0] ||
-            req.socket.remoteAddress ||
-            req.ip;
-
-        const cleanIP = rawIP.replace('::ffff:', '');
-
-        if (!["127.0.0.1", "::1"].includes(cleanIP)) {
-            if (process.env.OFFICE_IP && cleanIP !== process.env.OFFICE_IP) {
-                return res.status(403).json({
-                    message: `Connect to office network`,
-                });
-            }
-        }
-        */
 
         const { start, end } = getTodayRange();
 
@@ -168,6 +240,7 @@ const punchOut = async (req, res) => {
             });
         }
 
+        // ❌ Already punched out
         if (attendance.punchOut) {
             return res.status(400).json({
                 message: "You already punched out today"
@@ -177,16 +250,46 @@ const punchOut = async (req, res) => {
         const now = new Date();
         attendance.punchOut = now;
 
+        // ⏱ Calculate work duration
         const diff = now - attendance.punchIn;
-        const minutes = Math.floor(diff / (1000 * 60));
-
+        let minutes = Math.floor(diff / (1000 * 60));
+        // Product-level logic: deduct 1 hour break if they worked more than 5 hours (300 mins)
+        if (minutes > 300) {
+            minutes -= 60;
+        }
         attendance.workMinutes = Math.max(0, minutes);
+
+        // 🔥 NEW: Status Logic (REAL PRODUCT FEATURE)
+
+        const SHIFT_END_HOUR = 20;  // 6:30 PM
+        const shiftEnd = new Date();
+        shiftEnd.setHours(SHIFT_END_HOUR, 30, 0, 0);
+
+        // Late punch-out detection
+        if (now > shiftEnd) {
+            attendance.isLatePunchOut = true;
+        } else {
+            attendance.isLatePunchOut = false;
+        }
+
+        // Minimum work check (optional HR rule)
+        const MIN_WORK_MINUTES = 8 * 60; // 8 hours
+
+        if (attendance.workMinutes < MIN_WORK_MINUTES) {
+            attendance.status = "half-day";
+        } else {
+            attendance.status = "present";
+        }
+
+        // Reset autoClosed if user manually punched out
+        attendance.autoClosed = false;
 
         await attendance.save();
 
-        // 🚀 Real-time Update
-        req.app.get("io").emit("dashboard-update");
-        req.app.get("io").emit("attendance-update");
+        // 🚀 Real-time updates
+        const io = req.app.get("io");
+        io.emit("dashboard-update");
+        io.emit("attendance-update");
 
         res.json({
             message: "Punch out successful",

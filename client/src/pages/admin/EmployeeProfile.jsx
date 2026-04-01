@@ -61,13 +61,26 @@ function EmployeeProfile() {
     };
   }, [attendance]);
 
+  const calculateHours = (inTime, outTime) => {
+    if (!inTime || !outTime) return "—";
+    const diff = new Date(outTime) - new Date(inTime);
+    let minutes = Math.floor(diff / (1000 * 60));
+    // Product-level logic: deduct 1 hour break if they worked more than 5 hours (300 mins)
+    if (minutes > 300) {
+        minutes -= 60;
+    }
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${h}h ${m}m`;
+  };
+
   const downloadCSV = () => {
     const headers = ["Date", "Punch In", "Punch Out", "Work Hours", "Status"];
     const rows = filteredAttendance.map(r => [
       new Date(r.date).toLocaleDateString(),
       r.punchIn ? new Date(r.punchIn).toLocaleTimeString() : "-",
       r.punchOut ? new Date(r.punchOut).toLocaleTimeString() : "-",
-      r.workHours || "-",
+      calculateHours(r.punchIn, r.punchOut),
       r.status
     ]);
 
@@ -96,7 +109,7 @@ function EmployeeProfile() {
       new Date(r.date).toLocaleDateString(),
       r.punchIn ? new Date(r.punchIn).toLocaleTimeString() : "-",
       r.punchOut ? new Date(r.punchOut).toLocaleTimeString() : "-",
-      r.workHours || "-",
+      calculateHours(r.punchIn, r.punchOut),
       r.status.toUpperCase()
     ]);
 
@@ -259,7 +272,7 @@ function EmployeeProfile() {
                         <td className="px-8 py-5 font-bold text-slate-700">{new Date(record.date).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                         <td className="px-6 py-5 font-medium text-slate-500">{record.punchIn ? new Date(record.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}</td>
                         <td className="px-6 py-5 font-medium text-slate-500">{record.punchOut ? new Date(record.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}</td>
-                        <td className="px-6 py-5 font-bold text-slate-900">{record.workHours || "—"}</td>
+                        <td className="px-6 py-5 font-bold text-slate-900">{calculateHours(record.punchIn, record.punchOut)}</td>
                         <td className="px-6 py-5 text-right">
                           <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-tighter ${record.status === "late" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
                             }`}>

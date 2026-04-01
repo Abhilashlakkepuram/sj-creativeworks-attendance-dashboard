@@ -13,6 +13,7 @@ const leaveRoutes = require("./routes/leaveRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
+const { initCronJobs } = require("./services/cronService");
 
 const app = express();
 const server = http.createServer(app);
@@ -244,6 +245,9 @@ connectDB().then(() => {
     console.log(`🌍 ENV: ${process.env.NODE_ENV || "development"}`);
     console.log(`🌐 CLIENT_URL: ${process.env.CLIENT_URL || "not set"}`);
   });
+
+  // ✅ Initialize Background Jobs
+  initCronJobs(app);
 
   // ✅ KEEP-ALIVE: prevents Render free tier from sleeping (protects server process)
   if (process.env.NODE_ENV === "production") {

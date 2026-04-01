@@ -52,9 +52,16 @@ function EmployeeAttendance() {
 
     // ───────────────── CALCULATE HOURS ─────────────────
     const calculateHours = (inTime, outTime) => {
-        if (!inTime || !outTime) return "-";
+        if (!inTime || !outTime) return "—";
         const diff = new Date(outTime) - new Date(inTime);
-        return (diff / (1000 * 60 * 60)).toFixed(2) + "h";
+        let minutes = Math.floor(diff / (1000 * 60));
+        // Product-level logic: deduct 1 hour break if they worked more than 5 hours (300 mins)
+        if (minutes > 300) {
+            minutes -= 60;
+        }
+        const h = Math.floor(minutes / 60);
+        const m = minutes % 60;
+        return `${h}h ${m}m`;
     };
 
     // ───────────────── PDF DOWNLOAD ─────────────────

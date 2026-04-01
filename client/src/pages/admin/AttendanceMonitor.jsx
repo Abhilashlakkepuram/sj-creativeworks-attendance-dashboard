@@ -23,6 +23,19 @@ function AttendanceMonitor() {
   const [loading, setLoading] = useState(true);
   const [expandedDates, setExpandedDates] = useState({});
 
+  const calculateHours = (inTime, outTime) => {
+    if (!inTime || !outTime) return "—";
+    const diff = new Date(outTime) - new Date(inTime);
+    let minutes = Math.floor(diff / (1000 * 60));
+    // Product-level logic: deduct 1 hour break if they worked more than 5 hours (300 mins)
+    if (minutes > 300) {
+        minutes -= 60;
+    }
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${h}h ${m}m`;
+  };
+
   const fetchAttendance = async () => {
     try {
       setLoading(true);
@@ -117,7 +130,7 @@ function AttendanceMonitor() {
       item.user?.email || "-",
       item.punchIn ? new Date(item.punchIn).toLocaleTimeString() : "-",
       item.punchOut ? new Date(item.punchOut).toLocaleTimeString() : "-",
-      item.workHours || "-",
+      calculateHours(item.punchIn, item.punchOut),
       item.status.toUpperCase()
     ]);
 
@@ -294,7 +307,7 @@ function AttendanceMonitor() {
                             </td>
                             <td className="p-4 text-center">
                               <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold">
-                                {item.workHours || "0.00"}h
+                                {calculateHours(item.punchIn, item.punchOut)}
                               </span>
                             </td>
                             <td className="p-4 text-right">
