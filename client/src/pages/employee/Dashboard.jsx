@@ -308,7 +308,7 @@ function Dashboard() {
           </h3>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-1 gap-4">
           {announcementsLoading && announcements.length === 0 ? (
             <div className="col-span-full py-10 text-center text-slate-400 italic bg-white rounded-3xl border border-dashed border-slate-200">
               Loading updates...
@@ -322,14 +322,14 @@ function Dashboard() {
               <div key={ann._id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group relative overflow-hidden">
                 {/* Priority Indicator Line */}
                 <div className={`absolute left-0 top-0 bottom-0 w-1 ${ann.priority === "high" ? "bg-rose-500" :
-                    ann.priority === "medium" ? "bg-amber-500" :
-                      "bg-emerald-500"
+                  ann.priority === "medium" ? "bg-amber-500" :
+                    "bg-emerald-500"
                   }`} />
 
                 <div className="flex justify-between items-start mb-3 pl-2">
                   <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest border ${ann.priority === "high" ? "bg-rose-50 text-rose-600 border-rose-100" :
-                      ann.priority === "medium" ? "bg-amber-50 text-amber-600 border-amber-100" :
-                        "bg-emerald-50 text-emerald-600 border-emerald-100"
+                    ann.priority === "medium" ? "bg-amber-50 text-amber-600 border-amber-100" :
+                      "bg-emerald-50 text-emerald-600 border-emerald-100"
                     }`}>
                     {ann.priority}
                   </span>
