@@ -18,7 +18,7 @@ import Employees from "./pages/admin/Employees";
 import LeaveRequests from "./pages/admin/LeaveRequests";
 import AttendanceMonitor from "./pages/admin/AttendanceMonitor";
 import AdminHolidays from "./pages/admin/Holidays";
-import ReportsViewer from "./pages/admin/ReportsViewer";
+import Reports from "./pages/admin/Reports";
 import EmployeeProfile from "./pages/admin/EmployeeProfile";
 import EmployeeAttendance from "./pages/admin/EmployeeAttendance";
 import PostAnnouncement from "./pages/admin/PostAnnouncement";
@@ -30,7 +30,6 @@ import Leaves from "./pages/employee/Leaves";
 import EmployeeHolidays from "./pages/employee/Holidays";
 import Chat from "./pages/employee/Chat";
 import Notifications from "./pages/Notifications";
-import DailyWorkReportForm from "./pages/employee/DailyWorkReportForm";
 
 
 // 🔐 Role Protection
@@ -79,7 +78,7 @@ function AppRoutes() {
         <Route path="leaves" element={<LeaveRequests />} />
         <Route path="attendance" element={<AttendanceMonitor />} />
         <Route path="holidays" element={<AdminHolidays />} />
-        <Route path="reports" element={<ReportsViewer />} />
+        <Route path="reports" element={<Reports />} />
         <Route path="chat" element={<Chat />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="announcements" element={<PostAnnouncement />} />
@@ -97,7 +96,6 @@ function AppRoutes() {
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<EmployeeDashboard />} />
         <Route path="attendance" element={<Attendance />} />
-        <Route path="work-report" element={<DailyWorkReportForm />} />
         <Route path="leaves" element={<Leaves />} />
         <Route path="holidays" element={<EmployeeHolidays />} />
         <Route path="chat" element={<Chat />} />

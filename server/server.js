@@ -201,7 +201,6 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/announcements", require("./routes/announcementRoutes"));
 app.use("/api/holidays", require("./routes/holidayRoutes"));
-app.use("/api/reports", require("./routes/reportRoutes"));
 app.use("/api/upload", uploadRoutes);
 
 // ─────────────────────────────────────────────────────
