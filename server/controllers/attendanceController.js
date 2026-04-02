@@ -261,7 +261,7 @@ const punchOut = async (req, res) => {
 
         // 🔥 NEW: Status Logic (REAL PRODUCT FEATURE)
 
-        const SHIFT_END_HOUR = 20;  // 6:30 PM
+        const SHIFT_END_HOUR = 19;  // 7:30 PM
         const shiftEnd = new Date();
         shiftEnd.setHours(SHIFT_END_HOUR, 30, 0, 0);
 
@@ -307,6 +307,23 @@ const punchOut = async (req, res) => {
 const getMyAttendance = async (req, res) => {
     try {
         const userId = req.user.id;
+
+        // Auto close previous day missed punch-outs before returning
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        await Attendance.updateMany(
+            {
+                user: userId,
+                date: { $lt: today },
+                punchIn: { $exists: true, $ne: null },
+                punchOut: null,
+                missedPunchOut: { $ne: true }
+            },
+            {
+                $set: { missedPunchOut: true, workMinutes: 0 }
+            }
+        );
 
         const attendance = await Attendance.find({ user: userId })
             .sort({ date: -1 })

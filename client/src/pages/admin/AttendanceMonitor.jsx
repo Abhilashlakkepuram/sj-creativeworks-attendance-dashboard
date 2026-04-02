@@ -47,10 +47,23 @@ function AttendanceMonitor() {
       if (date) params.append("date", date);
 
       const res = await api.get(`/admin/attendance?${params}`);
-      setData(res.data.data);
+      const payloadData = res.data.data || [];
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+
+      const enrichedData = payloadData.map(d => {
+        const recordDate = new Date(d.date || d.punchIn || d.createdAt);
+        recordDate.setHours(0, 0, 0, 0);
+        if (d.punchIn && !d.punchOut && recordDate < startOfToday) {
+          return { ...d, missedPunchOut: true };
+        }
+        return d;
+      });
+
+      setData(enrichedData);
 
       // Initialize all dates as expanded by default
-      const grouped = groupAttendanceByDate(res.data.data);
+      const grouped = groupAttendanceByDate(enrichedData);
       const initialExpanded = {};
       Object.keys(grouped).forEach(d => {
         initialExpanded[d] = true;
@@ -313,9 +326,10 @@ function AttendanceMonitor() {
                             <td className="p-4 text-right">
                               <span className={`inline-flex px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest ${item.status === "absent" ? "bg-rose-50 text-rose-600" :
                                 item.status === "late" ? "bg-amber-50 text-amber-600" :
+                                item.missedPunchOut ? "bg-orange-50 text-orange-600" :
                                   "bg-emerald-50 text-emerald-600"
                                 }`}>
-                                {item.status}
+                                {item.missedPunchOut ? "missed punch-out" : item.status}
                               </span>
                             </td>
                           </tr>

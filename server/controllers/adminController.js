@@ -346,6 +346,9 @@ const getAllAttendance = async (req, res) => {
         const skip = (page - 1) * limit;
         let filter = {};
 
+        // Run auto close sync
+        await autoCloseMissedPunchOuts();
+
         if (date) {
             const selectedDate = new Date(date);
             const start = new Date(selectedDate.setHours(0, 0, 0, 0));

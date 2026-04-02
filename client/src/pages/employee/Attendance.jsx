@@ -22,23 +22,22 @@ const calcHours = (punchIn, punchOut) => {
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 const StatusBadge = ({ status, missedPunchOut }) => {
+  const displayStatus = missedPunchOut ? "missed punch-out" : status;
+  
   const base = "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider";
   const styles = {
     present: "bg-emerald-50 text-emerald-700 border border-emerald-200",
     late: "bg-amber-50 text-amber-700 border border-amber-200",
     absent: "bg-rose-50 text-rose-700 border border-rose-200",
+    "missed punch-out": "bg-orange-50 text-orange-700 border border-orange-200",
   };
   return (
-    <span className={`${base} ${styles[status] || styles.absent}`}>
-      {status === "present" && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />}
-      {status === "late" && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />}
-      {status === "absent" && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />}
-      {status}
-      {missedPunchOut && (
-        <span className="ml-1 bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded text-[9px] font-black uppercase">
-          No Punch Out
-        </span>
-      )}
+    <span className={`${base} ${styles[displayStatus] || styles.absent}`}>
+      {displayStatus === "present" && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />}
+      {displayStatus === "late" && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />}
+      {displayStatus === "absent" && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />}
+      {displayStatus === "missed punch-out" && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />}
+      {displayStatus}
     </span>
   );
 };
@@ -77,7 +76,20 @@ function EmployeeAttendance() {
       });
 
       const payload = res.data;
-      const records = payload.data || (Array.isArray(payload) ? payload : []);
+      let records = payload.data || (Array.isArray(payload) ? payload : []);
+      
+      // Auto-tag missed punch-outs dynamically for the frontend
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      records = records.map(d => {
+        const recordDate = new Date(d.date);
+        recordDate.setHours(0, 0, 0, 0);
+        if (d.punchIn && !d.punchOut && recordDate < startOfToday) {
+          return { ...d, missedPunchOut: true };
+        }
+        return d;
+      });
+
       const emp = payload.employee;
       const sum = payload.summary;
       const tp = payload.totalPages;
