@@ -261,7 +261,7 @@ const punchOut = async (req, res) => {
 
         // 🔥 NEW: Status Logic (REAL PRODUCT FEATURE)
 
-        const SHIFT_END_HOUR = 19;  // 7:30 PM
+        const SHIFT_END_HOUR = 20;  // 8 PM
         const shiftEnd = new Date();
         shiftEnd.setHours(SHIFT_END_HOUR, 30, 0, 0);
 
