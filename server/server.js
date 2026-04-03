@@ -202,6 +202,9 @@ app.use("/api/chat", chatRoutes);
 app.use("/api/announcements", require("./routes/announcementRoutes"));
 app.use("/api/holidays", require("./routes/holidayRoutes"));
 app.use("/api/upload", uploadRoutes);
+console.log("🛠 Mounting /api/reports...");
+app.use("/api/reports", require("./routes/reportRoutes"));
+
 
 // ─────────────────────────────────────────────────────
 // ✅ ERROR HANDLER

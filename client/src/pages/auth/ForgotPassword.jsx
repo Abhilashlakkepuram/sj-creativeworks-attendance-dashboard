@@ -30,9 +30,9 @@ const ForgotPassword = () => {
                     "Server is taking too long. Your OTP may still be sent — check your email, or try again."
                 );
             } else {
-                setErrorMsg(
-                    error.response?.data?.message || "Failed to send OTP. Please try again."
-                );
+                const detailedError = error.response?.data?.error;
+                const baseMsg = error.response?.data?.message || "Failed to send OTP. Please try again.";
+                setErrorMsg(detailedError ? `${baseMsg}: ${detailedError}` : baseMsg);
             }
         } finally {
             setLoading(false);

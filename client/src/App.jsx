@@ -22,6 +22,7 @@ import Reports from "./pages/admin/Reports";
 import EmployeeProfile from "./pages/admin/EmployeeProfile";
 import EmployeeAttendance from "./pages/admin/EmployeeAttendance";
 import PostAnnouncement from "./pages/admin/PostAnnouncement";
+import DailyReports from "./pages/admin/DailyReports";
 
 // Employee pages
 import EmployeeDashboard from "./pages/employee/Dashboard";
@@ -30,6 +31,7 @@ import Leaves from "./pages/employee/Leaves";
 import EmployeeHolidays from "./pages/employee/Holidays";
 import Chat from "./pages/employee/Chat";
 import Notifications from "./pages/Notifications";
+import DailyReport from "./pages/employee/DailyReport";
 
 
 // 🔐 Role Protection
@@ -79,6 +81,7 @@ function AppRoutes() {
         <Route path="attendance" element={<AttendanceMonitor />} />
         <Route path="holidays" element={<AdminHolidays />} />
         <Route path="reports" element={<Reports />} />
+        <Route path="daily-reports" element={<DailyReports />} />
         <Route path="chat" element={<Chat />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="announcements" element={<PostAnnouncement />} />
@@ -100,6 +103,7 @@ function AppRoutes() {
         <Route path="holidays" element={<EmployeeHolidays />} />
         <Route path="chat" element={<Chat />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="daily-report" element={<DailyReport />} />
       </Route>
 
       {/* Fallback */}

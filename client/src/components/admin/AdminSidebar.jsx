@@ -9,6 +9,7 @@ const navItems = [
   { name: "Leave Requests", path: "/admin/leaves" },
   { name: "Holidays", path: "/admin/holidays" },
   { name: "Reports", path: "/admin/reports" },
+  { name: "Daily Reports", path: "/admin/daily-reports" },
   { name: "Chat", path: "/admin/chat" },
   { name: "Notifications", path: "/admin/notifications" },
   { name: "Announcements", path: "/admin/announcements" },

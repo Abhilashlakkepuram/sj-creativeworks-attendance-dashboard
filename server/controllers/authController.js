@@ -208,40 +208,32 @@ const forgotPassword = async (req, res) => {
   const requestId = Math.random().toString(36).substring(7);
   console.log(`[${requestId}] == FORGOT PASSWORD ==`, req.body);
 
-  try {
-    const { email } = req.body;
+  const { email } = req.body;
 
+  try {
     if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is required"
-      });
+      return res.status(400).json({ success: false, message: "Email is required" });
     }
 
+    console.log(`[${requestId}] 1️⃣ Finding user: ${email}`);
     const user = await User.findOne({ email });
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found"
-      });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    // 🔐 Generate OTP
+    console.log(`[${requestId}] 2️⃣ Generating OTP for: ${user.name}`);
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    const hashedOTP = crypto
-      .createHash("sha256")
-      .update(otp)
-      .digest("hex");
+    const hashedOTP = crypto.createHash("sha256").update(otp).digest("hex");
 
     user.resetOTP = hashedOTP;
     user.resetOTPExpires = Date.now() + 10 * 60 * 1000;
     user.resetAttempts = 0;
 
+    console.log(`[${requestId}] 3️⃣ Saving OTP to DB...`);
     await user.save();
-
-    console.log(`🔐 OTP for ${email}:`, otp); // remove later
+    console.log(`[${requestId}] ✅ OTP saved. OTP: ${otp}`);
 
     // 🎨 Email HTML
     const html = `
@@ -251,44 +243,43 @@ const forgotPassword = async (req, res) => {
         <p>Hello <strong>${user.name}</strong>,</p>
         <p>Your OTP for password reset:</p>
         <div style="text-align:center;margin:20px 0;">
-          <span style="font-size:32px;font-weight:bold;letter-spacing:5px;color:#1F8B8D;">
-            ${otp}
-          </span>
+          <span style="font-size:32px;font-weight:bold;letter-spacing:5px;color:#1F8B8D;">${otp}</span>
         </div>
-        <p style="text-align:center;font-size:12px;color:#666;">
-          Valid for 10 minutes
-        </p>
+        <p style="text-align:center;font-size:12px;color:#666;">Valid for 10 minutes</p>
       </div>
-    </div>
-    `;
+    </div>`;
 
-    // 📧 Send Email
-    const emailResult = await sendEmail(
-      email.trim(),
-      "Password Reset OTP - SJ Creativeworks",
-      html
-    );
+    console.log(`[${requestId}] 4️⃣ Sending response...`);
 
-    if (emailResult.error) {
-      return res.status(500).json({
-        success: false,
-        message: "Failed to send OTP email",
-        error: emailResult.errorMessage
+    // ✅ Respond immediately — don't block on email
+    res.json({ success: true, message: "OTP sent to your email. Please check your inbox." });
+
+    console.log(`[${requestId}] 5️⃣ Response sent. Firing background email...`);
+
+    // 📧 Send email in background (non-blocking)
+    sendEmail(email.trim(), "Password Reset OTP - SJ Creativeworks", html)
+      .then((result) => {
+        if (result?.error) {
+          console.error(`[${requestId}] ❌ Background email failed:`, result.errorMessage);
+        } else {
+          console.log(`[${requestId}] ✅ OTP email delivered to ${email}`);
+        }
+      })
+      .catch((err) => {
+        console.error(`[${requestId}] ❌ Background email exception:`, err.message);
       });
-    }
-
-    return res.json({
-      success: true,
-      message: "OTP sent successfully"
-    });
 
   } catch (error) {
-    console.error("❌ Forgot Password Error:", error.message);
+    console.error(`[${requestId}] ❌ Forgot Password Error at step:`, error.message, error.stack);
 
-    return res.status(500).json({
-      success: false,
-      message: "Server error"
-    });
+    // Skip if response already started
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        message: "Server error",
+        debug: error.message  // remove after debugging
+      });
+    }
   }
 };
 const resetPassword = async (req, res) => {
