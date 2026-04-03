@@ -273,7 +273,7 @@ const punchOut = async (req, res) => {
         }
 
         // Minimum work check (optional HR rule)
-        const MIN_WORK_MINUTES = 8 * 60; // 8 hours
+        const MIN_WORK_MINUTES = 5 * 60; // 5 hours
 
         if (attendance.workMinutes < MIN_WORK_MINUTES) {
             attendance.status = "half-day";
