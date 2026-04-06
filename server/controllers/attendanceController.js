@@ -88,7 +88,7 @@ const punchIn = async (req, res) => {
         const User = require("../models/User");
         const user = await User.findById(userId);
 
-        await notifyAdmins(req.app, "attendance", `${user?.name || "Employee"} has punched in (${status})`);
+        await notifyAdmins(req.app, "attendance", `${user?.name || "Employee"} has punched in (${status})`, "/admin/attendance");
 
         // 🚀 Real-time Update
         req.app.get("io").emit("dashboard-update");
@@ -259,11 +259,12 @@ const punchOut = async (req, res) => {
         }
         attendance.workMinutes = Math.max(0, minutes);
 
-        // 🔥 NEW: Status Logic (REAL PRODUCT FEATURE)
-
-        const SHIFT_END_HOUR = 20;  // 8 PM
+        // 🔥 NEW: Status Logic
+        const shiftEndStr = process.env.SHIFT_END_TIME || "20:30";
+        const [hour, minute] = shiftEndStr.split(":").map(Number);
+        
         const shiftEnd = new Date();
-        shiftEnd.setHours(SHIFT_END_HOUR, 30, 0, 0);
+        shiftEnd.setHours(hour || 20, minute || 30, 0, 0);
 
         // Late punch-out detection
         if (now > shiftEnd) {
@@ -272,17 +273,18 @@ const punchOut = async (req, res) => {
             attendance.isLatePunchOut = false;
         }
 
-        // Minimum work check (optional HR rule)
-        const MIN_WORK_MINUTES = 5 * 60; // 5 hours
+        // Minimum work check
+        const minWorkHours = parseInt(process.env.MIN_WORK_HOURS_FOR_FULL_DAY) || 8;
+        const minWorkMinutes = minWorkHours * 60;
 
-        if (attendance.workMinutes < MIN_WORK_MINUTES) {
+        if (attendance.workMinutes < minWorkMinutes) {
             attendance.status = "half-day";
         } else {
             attendance.status = "present";
         }
 
-        // Reset autoClosed if user manually punched out
-        attendance.autoClosed = false;
+        // Reset missedPunchOut if user manually punched out
+        attendance.missedPunchOut = false;
 
         await attendance.save();
 
@@ -312,18 +314,47 @@ const getMyAttendance = async (req, res) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        await Attendance.updateMany(
+        const missed = await Attendance.find(
             {
                 user: userId,
                 date: { $lt: today },
                 punchIn: { $exists: true, $ne: null },
                 punchOut: null,
                 missedPunchOut: { $ne: true }
-            },
-            {
-                $set: { missedPunchOut: true, workMinutes: 0 }
             }
         );
+
+        if (missed.length > 0) {
+            const targetHour = parseInt(process.env.AUTO_PUNCH_OUT_TARGET_HOUR) || 19;
+            for (let record of missed) {
+                const punchOutTime = new Date(record.date);
+                punchOutTime.setHours(targetHour, 0, 0, 0);
+                
+                record.punchOut = punchOutTime;
+                record.missedPunchOut = true;
+
+                const diff = punchOutTime - record.punchIn;
+                let minutes = Math.floor(diff / (1000 * 60));
+                
+                if (minutes > 300) {
+                    minutes -= 60;
+                }
+                
+                record.workMinutes = Math.max(0, minutes);
+
+                // Update status
+                const minWorkHours = parseInt(process.env.MIN_WORK_HOURS_FOR_FULL_DAY) || 8;
+                const minWorkMinutes = minWorkHours * 60;
+
+                if (record.workMinutes < minWorkMinutes) {
+                    record.status = "half-day";
+                } else {
+                    record.status = "present";
+                }
+
+                await record.save();
+            }
+        }
 
         const attendance = await Attendance.find({ user: userId })
             .sort({ date: -1 })

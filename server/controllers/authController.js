@@ -56,7 +56,8 @@ const registerUser = async (req, res) => {
     await notifyAdmins(
       req.app,
       "registration",
-      `New employee registration: ${name} (${role})`
+      `New employee registration: ${name} (${role})`,
+      "/admin/employees"
     );
 
     io.emit("dashboard-update");

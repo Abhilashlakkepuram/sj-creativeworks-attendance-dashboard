@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import api from "../services/api";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import { formatDistanceToNow } from "date-fns";
 
 const typeIcons = {
@@ -22,6 +24,8 @@ function Notifications() {
   const [notifications, setNotifications] = useState([]);
   const [filter, setFilter] = useState("all"); // 'all' or 'unread'
   const [loading, setLoading] = useState(true);
+  const { role } = useAuth();
+  const navigate = useNavigate();
 
   const fetchNotifications = async () => {
     try {
@@ -156,7 +160,27 @@ function Notifications() {
             {filteredNotifications.map((notif) => (
               <div
                 key={notif._id}
-                onClick={() => !notif.isRead && markAsRead(notif._id)}
+                onClick={() => {
+                  if (!notif.isRead) markAsRead(notif._id);
+                  
+                  let targetLink = notif.link;
+
+                  // Support dynamic role-based path for chat if link is generic or wrong
+                  if (notif.type === "chat") {
+                    targetLink = role === "admin" ? "/admin/chat" : "/employee/chat";
+                  }
+
+                  if (!targetLink) {
+                    targetLink = 
+                      notif.type === "attendance" ? (role === "admin" ? "/admin/attendance" : "/employee/attendance") :
+                      notif.type === "leave" ? (role === "admin" ? "/admin/leaves" : "/employee/leaves") :
+                      notif.type === "registration" ? "/admin/employees" :
+                      notif.type === "announcement" ? (role === "admin" ? "/admin/dashboard" : "/employee/dashboard") :
+                      (role === "admin" ? "/admin/dashboard" : "/employee/dashboard");
+                  }
+                  
+                  if (targetLink) navigate(targetLink);
+                }}
                 className={`group flex items-start gap-4 p-6 transition-all duration-200 cursor-pointer ${
                   !notif.isRead ? "bg-primary-50/40" : "hover:bg-slate-50/80"
                 }`}

@@ -14,34 +14,53 @@ const getTodayRangeHelper = () => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ✅ NEW: Auto-close missed punch-outs from previous days
-// Call this once per day via a cron job, or trigger it when admin views records.
-// Marks any record with punchIn but no punchOut (from previous days) as
-// missedPunchOut=true and sets workMinutes=0.
-// ─────────────────────────────────────────────────────────────────────────────
 const autoCloseMissedPunchOuts = async () => {
     try {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
         // Find all records from before today that have punchIn but no punchOut
-        const missed = await Attendance.updateMany(
+        const missed = await Attendance.find(
             {
                 date: { $lt: today },
                 punchIn: { $exists: true, $ne: null },
                 punchOut: null,
-                missedPunchOut: { $ne: true } // don't re-process
-            },
-            {
-                $set: {
-                    missedPunchOut: true,
-                    workMinutes: 0
-                }
+                missedPunchOut: { $ne: true }
             }
         );
 
-        if (missed.modifiedCount > 0) {
-            console.log(`🕐 Auto-closed ${missed.modifiedCount} missed punch-outs`);
+        if (missed.length > 0) {
+            const targetHour = parseInt(process.env.AUTO_PUNCH_OUT_TARGET_HOUR) || 19;
+            
+            for (let record of missed) {
+                const punchOutTime = new Date(record.date);
+                punchOutTime.setHours(targetHour, 0, 0, 0);
+                
+                record.punchOut = punchOutTime;
+                record.missedPunchOut = true;
+
+                const diff = punchOutTime - record.punchIn;
+                let minutes = Math.floor(diff / (1000 * 60));
+                
+                if (minutes > 300) {
+                    minutes -= 60;
+                }
+                
+                record.workMinutes = Math.max(0, minutes);
+
+                // Update status
+                const minWorkHours = parseInt(process.env.MIN_WORK_HOURS_FOR_FULL_DAY) || 8;
+                const minWorkMinutes = minWorkHours * 60;
+                
+                if (record.workMinutes < minWorkMinutes) {
+                    record.status = "half-day";
+                } else {
+                    record.status = "present";
+                }
+
+                await record.save();
+            }
+            console.log(`🕐 Auto-closed ${missed.length} missed punch-outs at ${targetHour}:00 target.`);
         }
     } catch (err) {
         console.error("❌ autoCloseMissedPunchOuts error:", err.message);
@@ -366,7 +385,7 @@ const getAllAttendance = async (req, res) => {
             };
         }
 
-        if (status === "present") filter.status = { $in: ["present", "late"] };
+        if (status === "present") filter.status = { $in: ["present", "late", "half-day"] };
         if (status === "late") filter.status = "late";
 
         let datesToCheck = [];

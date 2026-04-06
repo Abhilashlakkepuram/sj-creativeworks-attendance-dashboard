@@ -3,13 +3,17 @@ const Attendance = require("../models/Attendance");
 const Notification = require("../models/Notification");
 
 const initCronJobs = (app) => {
-  // Run every day at 8:00 PM (20:00) server time to auto-punch out
-  cron.schedule("0 20 * * *", async () => {
-    console.log("🕒 Running 8 PM Auto Punch-Out...");
+  // Run cron job based on .env configuration (default 9 PM IST)
+  cron.schedule(process.env.AUTO_PUNCH_OUT_JOB_CRON || "0 21 * * *", async () => {
+    const timezone = process.env.TIMEZONE || "Asia/Kolkata";
+    const targetHour = parseInt(process.env.AUTO_PUNCH_OUT_TARGET_HOUR) || 19; // Default 7 PM (19:00)
+
+    console.log(`🕒 Running Auto Punch-Out (Target: ${targetHour}:00 ${timezone})...`);
+    
     try {
       const io = app.get("io");
 
-      // Get today's boundaries
+      // Get today's boundaries in Local Time
       const start = new Date();
       start.setHours(0, 0, 0, 0);
       const end = new Date();
@@ -27,26 +31,31 @@ const initCronJobs = (app) => {
         return;
       }
 
-      console.log(`⚠️ Auto punching out ${missingPunchOuts.length} users at 8 PM.`);
-
-      const now = new Date();
+      console.log(`⚠️ Auto punching out ${missingPunchOuts.length} users at ${targetHour}:00.`);
 
       for (let attendance of missingPunchOuts) {
-        attendance.punchOut = now;
+        // Set punchOut to the target hour (7 PM) of the same day
+        const punchOutTime = new Date();
+        punchOutTime.setHours(targetHour, 0, 0, 0);
+        
+        attendance.punchOut = punchOutTime;
         attendance.missedPunchOut = true;
 
-        const diff = now - attendance.punchIn;
+        const diff = punchOutTime - attendance.punchIn;
         let minutes = Math.floor(diff / (1000 * 60));
         
-        // Deduct 60 minutes for lunch if working more than 5 hours
+        // Deduct 60 minutes for lunch if working more than 5 hours (300 mins)
         if (minutes > 300) {
           minutes -= 60;
         }
         
         attendance.workMinutes = Math.max(0, minutes);
 
-        const MIN_WORK_MINUTES = 8 * 60; // 8 hours
-        if (attendance.workMinutes < MIN_WORK_MINUTES) {
+        // Standard status logic
+        const minWorkHours = parseInt(process.env.MIN_WORK_HOURS_FOR_FULL_DAY) || 8;
+        const minWorkMinutes = minWorkHours * 60;
+
+        if (attendance.workMinutes < minWorkMinutes) {
           attendance.status = "half-day";
         } else {
           attendance.status = "present";
@@ -58,7 +67,8 @@ const initCronJobs = (app) => {
         await Notification.create({
           user: attendance.user,
           type: "attendance",
-          message: "Auto Punch-out: You were automatically punched out at 8 PM.",
+          message: `Auto Punch-out: You forgot to punch out today. The system has automatically checked you out at ${targetHour === 19 ? '7:00 PM' : targetHour + ':00'}.`,
+          link: "/employee/attendance"
         });
       }
 

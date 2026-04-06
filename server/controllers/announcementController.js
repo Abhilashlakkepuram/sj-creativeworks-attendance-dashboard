@@ -37,7 +37,8 @@ const createAnnouncement = async (req, res) => {
                 const notificationData = users.map(u => ({
                     user: u._id,
                     type: "announcement",
-                    message: `📢 NEW ANNOUNCEMENT: ${title}`
+                    message: `📢 NEW ANNOUNCEMENT: ${title}`,
+                    link: "/employee/dashboard"
                 }));
 
                 const savedNotifs = await Notification.insertMany(notificationData);

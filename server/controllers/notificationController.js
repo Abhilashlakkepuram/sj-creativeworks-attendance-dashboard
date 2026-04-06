@@ -2,12 +2,12 @@ const Notification = require("../models/Notification");
 const User = require("../models/User");
 
 // Helper: create a notification and emit via Socket.IO
-const createNotification = async (app, userIds, type, message) => {
+const createNotification = async (app, userIds, type, message, link = null) => {
   try {
     const ids = Array.isArray(userIds) ? userIds : [userIds];
     const io = app.get("io");
 
-    const notifications = ids.map(id => ({ user: id, type, message }));
+    const notifications = ids.map(id => ({ user: id, type, message, link }));
     const savedNotifs = await Notification.insertMany(notifications);
 
     if (io) {
@@ -22,12 +22,12 @@ const createNotification = async (app, userIds, type, message) => {
 };
 
 // Helper: notify all admin users
-const notifyAdmins = async (app, type, message) => {
+const notifyAdmins = async (app, type, message, link = null) => {
   try {
     const admins = await User.find({ role: "admin" }).select("_id");
     const adminIds = admins.map(a => a._id);
     if (adminIds.length > 0) {
-      const res = await createNotification(app, adminIds, type, message);
+      const res = await createNotification(app, adminIds, type, message, link);
 
       const io = app.get("io");
       if (io) {

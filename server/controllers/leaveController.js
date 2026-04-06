@@ -49,7 +49,8 @@ const requestLeave = async (req, res) => {
     await notifyAdmins(
       req.app,
       "leave",
-      `New leave request from ${user?.name || "Employee"}`
+      `New leave request from ${user?.name || "Employee"}`,
+      "/admin/leaves"
     );
 
     // 🚀 REAL-TIME UPDATE
@@ -124,7 +125,8 @@ const approveLeave = async (req, res) => {
       req.app,
       leave.user._id,
       "leave",
-      `Your leave request from ${new Date(leave.startDate).toLocaleDateString()} has been approved`
+      `Your leave request from ${new Date(leave.startDate).toLocaleDateString()} has been approved`,
+      "/employee/leaves"
     );
 
     res.json({
@@ -172,7 +174,8 @@ const rejectLeave = async (req, res) => {
       req.app,
       leave.user._id,
       "leave",
-      `Your leave request from ${new Date(leave.startDate).toLocaleDateString()} has been rejected`
+      `Your leave request from ${new Date(leave.startDate).toLocaleDateString()} has been rejected`,
+      "/employee/leaves"
     );
 
     res.json({

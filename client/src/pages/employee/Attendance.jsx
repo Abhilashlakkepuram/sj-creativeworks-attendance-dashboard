@@ -29,6 +29,7 @@ const StatusBadge = ({ status, missedPunchOut }) => {
     present: "bg-emerald-50 text-emerald-700 border border-emerald-200",
     late: "bg-amber-50 text-amber-700 border border-amber-200",
     absent: "bg-rose-50 text-rose-700 border border-rose-200",
+    "half-day": "bg-blue-50 text-blue-700 border border-blue-200",
     "missed punch-out": "bg-orange-50 text-orange-700 border border-orange-200",
   };
   return (
@@ -36,6 +37,7 @@ const StatusBadge = ({ status, missedPunchOut }) => {
       {displayStatus === "present" && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />}
       {displayStatus === "late" && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />}
       {displayStatus === "absent" && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />}
+      {displayStatus === "half-day" && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />}
       {displayStatus === "missed punch-out" && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />}
       {displayStatus}
     </span>
