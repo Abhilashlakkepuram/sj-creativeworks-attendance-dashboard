@@ -46,17 +46,41 @@ function NotificationBell() {
         setNotifications((prev) => [notif, ...prev].slice(0, 50));
         setUnreadCount((prev) => prev + 1);
 
-        // Show a native browser notification if allowed
         if (Notification.permission === "granted") {
           const title = notif.type === "announcement" ? "New Company Announcement" : "New SJCW Alert";
-          new Notification(title, { body: notif.message });
+          const n = new Notification(title, { body: notif.message });
+          n.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.focus();
+            
+            if (!notif.isRead) markAsRead(notif._id);
+
+            let targetLink = notif.link;
+            
+            // Support dynamic role-based path for chat if link is generic or wrong
+            if (notif.type === "chat") {
+              targetLink = role === "admin" ? "/admin/chat" : "/employee/chat";
+            }
+
+            if (!targetLink) {
+              targetLink = 
+                notif.type === "attendance" ? (role === "admin" ? "/admin/attendance" : "/employee/attendance") :
+                notif.type === "leave" ? (role === "admin" ? "/admin/leaves" : "/employee/leaves") :
+                notif.type === "registration" ? "/admin/employees" :
+                notif.type === "announcement" ? (role === "admin" ? "/admin/dashboard" : "/employee/dashboard") :
+                (role === "admin" ? "/admin/dashboard" : "/employee/dashboard");
+            }
+            
+            if (targetLink) navigate(targetLink);
+            n.close();
+          });
         }
       };
 
       socket.on("new-notification", handleNewNotification);
       return () => socket.off("new-notification", handleNewNotification);
     }
-  }, [socket]);
+  }, [socket, role, navigate]);
 
   // Request notification permission
   useEffect(() => {
