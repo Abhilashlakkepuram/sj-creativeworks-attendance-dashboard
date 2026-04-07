@@ -28,6 +28,7 @@ const StatusBadge = ({ status, missedPunchOut }) => {
   const styles = {
     present: "bg-emerald-50 text-emerald-700 border border-emerald-200",
     late: "bg-amber-50 text-amber-700 border border-amber-200",
+    "late present": "bg-orange-50 text-orange-700 border border-orange-200",
     absent: "bg-rose-50 text-rose-700 border border-rose-200",
     "half-day": "bg-blue-50 text-blue-700 border border-blue-200",
     "missed punch-out": "bg-orange-50 text-orange-700 border border-orange-200",
@@ -36,6 +37,7 @@ const StatusBadge = ({ status, missedPunchOut }) => {
     <span className={`${base} ${styles[displayStatus] || styles.absent}`}>
       {displayStatus === "present" && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />}
       {displayStatus === "late" && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />}
+      {displayStatus === "late present" && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />}
       {displayStatus === "absent" && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />}
       {displayStatus === "half-day" && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />}
       {displayStatus === "missed punch-out" && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />}
@@ -65,7 +67,7 @@ function EmployeeAttendance() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const [filter, setFilter] = useState("all"); // all | present | late | absent | missed
+  const [filter, setFilter] = useState("all"); // all | present | late | late present | absent | missed
   const LIMIT = 30;
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
@@ -230,7 +232,7 @@ function EmployeeAttendance() {
 
       {/* ── Filter Tabs ── */}
       <div className="flex gap-2 flex-wrap">
-        {["all", "present", "late", "absent", "missed"].map(f => (
+        {["all", "present", "late", "late present", "absent", "missed"].map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}

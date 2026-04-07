@@ -44,10 +44,8 @@ const initCronJobs = (app) => {
         const diff = punchOutTime - attendance.punchIn;
         let minutes = Math.floor(diff / (1000 * 60));
         
-        // Deduct 60 minutes for lunch if working more than 5 hours (300 mins)
-        if (minutes > 300) {
-          minutes -= 60;
-        }
+        // Strictly subtract 60 minutes for lunch break
+        minutes -= 60;
         
         attendance.workMinutes = Math.max(0, minutes);
 

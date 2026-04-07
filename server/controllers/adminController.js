@@ -42,9 +42,8 @@ const autoCloseMissedPunchOuts = async () => {
                 const diff = punchOutTime - record.punchIn;
                 let minutes = Math.floor(diff / (1000 * 60));
                 
-                if (minutes > 300) {
-                    minutes -= 60;
-                }
+                // Strictly subtract 60 minutes for lunch break
+                minutes -= 60;
                 
                 record.workMinutes = Math.max(0, minutes);
 
@@ -162,8 +161,8 @@ const getUserAttendance = async (req, res) => {
             // Summary stats across ALL days (not just current page)
             summary: {
                 total: allDays.length,
-                present: allDays.filter(d => d.status === "present").length,
-                late: allDays.filter(d => d.status === "late").length,
+                present: allDays.filter(d => ["present", "late present"].includes(d.status)).length,
+                late: allDays.filter(d => ["late", "late present"].includes(d.status)).length,
                 absent: allDays.filter(d => d.status === "absent").length,
                 missedPunchOut: allDays.filter(d => d.missedPunchOut).length,
             }
@@ -213,7 +212,7 @@ const getEmployees = async (req, res) => {
                             $filter: {
                                 input: "$attendance",
                                 as: "a",
-                                cond: { $eq: ["$$a.status", "late"] }
+                                cond: { $in: ["$$a.status", ["late", "late present"]] }
                             }
                         }
                     },
@@ -236,6 +235,7 @@ const getEmployees = async (req, res) => {
             {
                 $addFields: {
                     todayStatus: { $ifNull: ["$todayRecord.status", "absent"] },
+                isLate: "$todayRecord.isLate",
                     punchIn: "$todayRecord.punchIn",
                     punchOut: "$todayRecord.punchOut"
                 }
@@ -385,8 +385,8 @@ const getAllAttendance = async (req, res) => {
             };
         }
 
-        if (status === "present") filter.status = { $in: ["present", "late", "half-day"] };
-        if (status === "late") filter.status = "late";
+        if (status === "present") filter.status = { $in: ["present", "late", "late present", "half-day"] };
+        if (status === "late") filter.status = { $in: ["late", "late present"] };
 
         let datesToCheck = [];
         if (date) {
@@ -485,7 +485,7 @@ const getDashboardStats = async (req, res) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const todayAttendance = await Attendance.countDocuments({ date: today });
-        const lateEmployees = await Attendance.countDocuments({ date: today, status: "late" });
+        const lateEmployees = await Attendance.countDocuments({ date: today, status: { $in: ["late", "late present"] } });
         res.json({ totalEmployees, todayAttendance, lateEmployees });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });

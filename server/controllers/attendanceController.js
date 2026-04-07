@@ -66,12 +66,16 @@ const punchIn = async (req, res) => {
         }
 
         const now = new Date();
+        // Timezone-aware check for Asia/Kolkata
+        const indiaTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+        const hour = indiaTime.getHours();
+        const minute = indiaTime.getMinutes();
 
         let status = "present";
         let isLate = false;
 
-        if (now.getHours() > 10 || (now.getHours() === 10 && now.getMinutes() >= 15)) {
-            status = "late";
+        if (hour > 10 || (hour === 10 && minute >= 15)) {
+            status = "late present";
             isLate = true;
         }
 
@@ -262,7 +266,7 @@ const punchOut = async (req, res) => {
         // 🔥 NEW: Status Logic
         const shiftEndStr = process.env.SHIFT_END_TIME || "20:30";
         const [hour, minute] = shiftEndStr.split(":").map(Number);
-        
+
         const shiftEnd = new Date();
         shiftEnd.setHours(hour || 20, minute || 30, 0, 0);
 
@@ -329,17 +333,16 @@ const getMyAttendance = async (req, res) => {
             for (let record of missed) {
                 const punchOutTime = new Date(record.date);
                 punchOutTime.setHours(targetHour, 0, 0, 0);
-                
+
                 record.punchOut = punchOutTime;
                 record.missedPunchOut = true;
 
                 const diff = punchOutTime - record.punchIn;
                 let minutes = Math.floor(diff / (1000 * 60));
-                
-                if (minutes > 300) {
-                    minutes -= 60;
-                }
-                
+
+                // Strictly subtract 1 hour (60 minutes) for lunch break
+                minutes -= 60;
+
                 record.workMinutes = Math.max(0, minutes);
 
                 // Update status

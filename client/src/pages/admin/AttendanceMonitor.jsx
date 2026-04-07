@@ -4,7 +4,7 @@ import { SocketContext } from "../../socket/SocketContext";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const STATUS = ["all", "present", "late", "absent"];
+const STATUS = ["all", "present", "late", "late present", "absent"];
 
 const getLocalISOString = (date) => {
   const d = new Date(date);
@@ -272,7 +272,7 @@ function AttendanceMonitor() {
                       {groupedData[dateKey].filter(r => r.status === 'present').length} Present
                     </span>
                     <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-md">
-                      {groupedData[dateKey].filter(r => r.status === 'late').length} Late
+                      {groupedData[dateKey].filter(r => ["late", "late present"].includes(r.status)).length} Late
                     </span>
                   </div>
                   <svg
@@ -326,6 +326,7 @@ function AttendanceMonitor() {
                             <td className="p-4 text-right">
                               <span className={`inline-flex px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest ${item.status === "absent" ? "bg-rose-50 text-rose-600" :
                                 item.status === "late" ? "bg-amber-50 text-amber-600" :
+                                item.status === "late present" ? "bg-orange-50 text-orange-600" :
                                 item.status === "half-day" ? "bg-blue-50 text-blue-600" :
                                 item.missedPunchOut ? "bg-orange-50 text-orange-600" :
                                   "bg-emerald-50 text-emerald-600"
