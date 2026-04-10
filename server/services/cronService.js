@@ -1,85 +1,90 @@
+
+// cron/autoPunchOut.js
+// Runs every day at 8:00 PM IST
+// 1. Sends warning notification to employees who haven't punched out
+// 2. Auto punch-out them at 8:00 PM
+// 3. Recalculates hours + sets status = "missed punch-out"
+
 const cron = require("node-cron");
 const Attendance = require("../models/Attendance");
-const Notification = require("../models/Notification");
+const Notification = require("../models/Notification"); // adjust path if needed
+const { calculateWorkingHours } = require("../utils/attendanceHelpers");
 
-const initCronJobs = (app) => {
-  // Run cron job based on .env configuration (default 9 PM IST)
-  cron.schedule(process.env.AUTO_PUNCH_OUT_JOB_CRON || "0 21 * * *", async () => {
-    const timezone = process.env.TIMEZONE || "Asia/Kolkata";
-    const targetHour = parseInt(process.env.AUTO_PUNCH_OUT_TARGET_HOUR) || 19; // Default 7 PM (19:00)
+const initAutoPunchOutCron = (io) => {
 
-    console.log(`🕒 Running Auto Punch-Out (Target: ${targetHour}:00 ${timezone})...`);
-    
+  // Runs at 20:00 (8 PM) every day — IST timezone
+  cron.schedule("0 20 * * *", async () => {
+    console.log("[CRON] Running auto punch-out at 8 PM...");
+
     try {
-      const io = app.get("io");
+      const today = new Date();
+      const startOfDay = new Date(today);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(today);
+      endOfDay.setHours(23, 59, 59, 999);
 
-      // Get today's boundaries in Local Time
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-      const end = new Date();
-      end.setHours(23, 59, 59, 999);
-
-      // Find attendances for today where someone punched in but not out
-      const missingPunchOuts = await Attendance.find({
-        date: { $gte: start, $lte: end },
-        punchIn: { $ne: null },
+      // Find all employees who punched in today but haven't punched out
+      const missed = await Attendance.find({
+        date: { $gte: startOfDay, $lte: endOfDay },
+        punchIn: { $exists: true, $ne: null },
         punchOut: null
-      });
+      }).populate("user", "name email");
 
-      if (missingPunchOuts.length === 0) {
-        console.log("✅ No auto punch-outs needed for today.");
+      if (missed.length === 0) {
+        console.log("[CRON] No missed punch-outs today.");
         return;
       }
 
-      console.log(`⚠️ Auto punching out ${missingPunchOuts.length} users at ${targetHour}:00.`);
+      // Set auto punch-out time = 8:00 PM today
+      const autoPunchOutTime = new Date(today);
+      autoPunchOutTime.setHours(20, 0, 0, 0);
 
-      for (let attendance of missingPunchOuts) {
-        // Set punchOut to the target hour (7 PM) of the same day
-        const punchOutTime = new Date();
-        punchOutTime.setHours(targetHour, 0, 0, 0);
-        
-        attendance.punchOut = punchOutTime;
-        attendance.missedPunchOut = true;
+      for (let record of missed) {
+        // ✅ Rule 2 & 3: recorded at 8 PM but calculated up to 7 PM
+        const { minutes, hoursFloat } = calculateWorkingHours(record.punchIn, autoPunchOutTime, true);
 
-        const diff = punchOutTime - attendance.punchIn;
-        let minutes = Math.floor(diff / (1000 * 60));
-        
-        // Strictly subtract 60 minutes for lunch break
-        minutes -= 60;
-        
-        attendance.workMinutes = Math.max(0, minutes);
+        record.punchOut = autoPunchOutTime;
+        record.missedPunchOut = true;
+        record.autoPunchOut = true;
+        record.workMinutes = Math.max(0, minutes);
+        record.status = "missed punch-out";
 
-        // Standard status logic
-        const minWorkHours = parseInt(process.env.MIN_WORK_HOURS_FOR_FULL_DAY) || 8;
-        const minWorkMinutes = minWorkHours * 60;
+        await record.save();
 
-        if (attendance.workMinutes < minWorkMinutes) {
-          attendance.status = "half-day";
-        } else {
-          attendance.status = "present";
-        }
-
-        await attendance.save();
-
-        // Create notification for the user
+        // ✅ Rule 3: Correct notification message and type
         await Notification.create({
-          user: attendance.user,
-          type: "attendance",
-          message: `Auto Punch-out: You forgot to punch out today. The system has automatically checked you out at ${targetHour === 19 ? '7:00 PM' : targetHour + ':00'}.`,
-          link: "/employee/attendance"
+          user: record.user._id,
+          title: "Missed Punch-Out",
+          message: "You haven't punched out. Auto punch-out recorded at 8:00 PM.",
+          type: "WARNING",
+          link: "/attendance"
         });
+
+        console.log(`[CRON] Auto punch-out done for: ${record.user?.name || record.user}`);
       }
 
+      // Emit real-time update to admin dashboard
       if (io) {
         io.emit("dashboard-update");
         io.emit("attendance-update");
       }
+
+      console.log(`[CRON] Auto punch-out completed for ${missed.length} employee(s).`);
+
     } catch (error) {
-      console.error("❌ Auto Punch-out Error:", error);
+      console.error("[CRON] Auto punch-out error:", error.message);
     }
+
+  }, {
+    timezone: "Asia/Kolkata"  // ✅ Runs at 8 PM IST
   });
 
-  console.log("⏰ Cron job initialized (8 PM auto punch-out active)");
+  console.log("[CRON] Auto punch-out cron job scheduled (8 PM IST).");
 };
 
-module.exports = { initCronJobs };
+const initCronJobs = (app) => {
+  const io = app.get("io");
+  initAutoPunchOutCron(io);
+};
+
+module.exports = { initAutoPunchOutCron, initCronJobs };

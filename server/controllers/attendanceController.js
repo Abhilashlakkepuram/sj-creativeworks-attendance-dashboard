@@ -1,6 +1,8 @@
+// controllers/attendanceController.js
 const Attendance = require("../models/Attendance");
 const { notifyAdmins } = require("./notificationController");
 const { getDistance } = require("../utils/locationCheck.js");
+const { calculateWorkingHours, getAttendanceStatus } = require("../utils/attendanceHelpers");
 
 // Helper: get start and end of today in LOCAL server time
 const getTodayRange = () => {
@@ -11,7 +13,7 @@ const getTodayRange = () => {
     return { start, end };
 };
 
-// Punch In
+// ─── Punch In ────────────────────────────────────────────────────────────────
 const punchIn = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -25,32 +27,13 @@ const punchIn = async (req, res) => {
         const officeLng = parseFloat(process.env.OFFICE_LNG);
         const maxDistance = parseInt(process.env.MAX_DISTANCE_METERS) || 150;
 
-        const distance = getDistance(
-            location.lat,
-            location.lng,
-            officeLat,
-            officeLng
-        );
-        console.log("Distance:", distance);
-        console.log(officeLat, officeLng);
-        console.log(location.lat, location.lng);
+        const distance = getDistance(location.lat, location.lng, officeLat, officeLng);
+
         if (distance > maxDistance) {
             return res.status(403).json({
                 message: `You are not in office location (${Math.round(distance)}m away)`,
             });
         }
-
-        // ❌ IP VALIDATION DISABLED (Using GPS only)
-        /*
-        const userIP = req.ip.replace('::ffff:', '');
-        const allowedIPs = process.env.OFFICE_IP ? process.env.OFFICE_IP.split(',') : [];
-
-        if (allowedIPs.length > 0 && !allowedIPs.includes(userIP)) {
-            return res.status(403).json({
-                message: `Connect to office network (Your IP: ${userIP})`,
-            });
-        }
-        */
 
         const { start, end } = getTodayRange();
 
@@ -60,22 +43,21 @@ const punchIn = async (req, res) => {
         });
 
         if (existingAttendance) {
-            return res.status(400).json({
-                message: "You already punched in today"
-            });
+            return res.status(400).json({ message: "You already punched in today" });
         }
 
         const now = new Date();
-        // Timezone-aware check for Asia/Kolkata
+
+        // Check late punch-in (after 10:15 AM IST)
         const indiaTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
         const hour = indiaTime.getHours();
         const minute = indiaTime.getMinutes();
 
+        // ✅ Status is always "present" — final status recalculated on punch-out
         let status = "present";
         let isLate = false;
 
         if (hour > 10 || (hour === 10 && minute >= 15)) {
-            status = "late present";
             isLate = true;
         }
 
@@ -92,119 +74,24 @@ const punchIn = async (req, res) => {
         const User = require("../models/User");
         const user = await User.findById(userId);
 
-        await notifyAdmins(req.app, "attendance", `${user?.name || "Employee"} has punched in (${status})`, "/admin/attendance");
+        await notifyAdmins(
+            req.app,
+            "attendance",
+            `${user?.name || "Employee"} has punched in (${status})`,
+            "/admin/attendance"
+        );
 
-        // 🚀 Real-time Update
         req.app.get("io").emit("dashboard-update");
         req.app.get("io").emit("attendance-update");
 
-        res.json({
-            message: "Punch in successful",
-            attendance
-        });
+        res.json({ message: "Punch in successful", attendance });
 
     } catch (error) {
-        res.status(500).json({
-            message: "Server error",
-            error: error.message
-        });
+        res.status(500).json({ message: "Server error", error: error.message });
     }
 };
 
-// Punch Out
-// const punchOut = async (req, res) => {
-//     try {
-//         const userId = req.user.id;
-//         const { location } = req.body || {};
-
-//         if (!location) {
-//             return res.status(400).json({ message: "Location required" });
-//         }
-
-//         const officeLat = parseFloat(process.env.OFFICE_LAT);
-//         const officeLng = parseFloat(process.env.OFFICE_LNG);
-//         const maxDistance = parseInt(process.env.MAX_DISTANCE_METERS) || 150;
-
-//         const distance = getDistance(
-//             location.lat,
-//             location.lng,
-//             officeLat,
-//             officeLng
-//         );
-//         console.log("Distance:", distance);
-//         console.log(officeLat, officeLng);
-//         console.log(location.lat, location.lng);
-
-//         if (distance > maxDistance) {
-//             return res.status(403).json({
-//                 message: `You are not in office location (${Math.round(distance)}m away)`,
-//             });
-//         }
-
-//         // ❌ IP VALIDATION DISABLED (Using GPS only)
-//         /*
-//         const rawIP =
-//             req.headers['x-forwarded-for']?.split(',')[0] ||
-//             req.socket.remoteAddress ||
-//             req.ip;
-
-//         const cleanIP = rawIP.replace('::ffff:', '');
-
-//         if (!["127.0.0.1", "::1"].includes(cleanIP)) {
-//             if (process.env.OFFICE_IP && cleanIP !== process.env.OFFICE_IP) {
-//                 return res.status(403).json({
-//                     message: `Connect to office network`,
-//                 });
-//             }
-//         }
-//         */
-
-//         const { start, end } = getTodayRange();
-
-//         const attendance = await Attendance.findOne({
-//             user: userId,
-//             date: { $gte: start, $lte: end }
-//         });
-
-//         if (!attendance) {
-//             return res.status(400).json({
-//                 message: "You have not punched in today"
-//             });
-//         }
-
-//         if (attendance.punchOut) {
-//             return res.status(400).json({
-//                 message: "You already punched out today"
-//             });
-//         }
-
-//         const now = new Date();
-//         attendance.punchOut = now;
-
-//         const diff = now - attendance.punchIn;
-//         const minutes = Math.floor(diff / (1000 * 60));
-
-//         attendance.workMinutes = Math.max(0, minutes);
-
-//         await attendance.save();
-
-//         // 🚀 Real-time Update
-//         req.app.get("io").emit("dashboard-update");
-//         req.app.get("io").emit("attendance-update");
-
-//         res.json({
-//             message: "Punch out successful",
-//             attendance
-//         });
-
-//     } catch (error) {
-//         res.status(500).json({
-//             message: "Server error",
-//             error: error.message
-//         });
-//     }
-// };
-
+// ─── Punch Out ───────────────────────────────────────────────────────────────
 const punchOut = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -218,12 +105,7 @@ const punchOut = async (req, res) => {
         const officeLng = parseFloat(process.env.OFFICE_LNG);
         const maxDistance = parseInt(process.env.MAX_DISTANCE_METERS) || 150;
 
-        const distance = getDistance(
-            location.lat,
-            location.lng,
-            officeLat,
-            officeLng
-        );
+        const distance = getDistance(location.lat, location.lng, officeLat, officeLng);
 
         if (distance > maxDistance) {
             return res.status(403).json({
@@ -239,124 +121,70 @@ const punchOut = async (req, res) => {
         });
 
         if (!attendance) {
-            return res.status(400).json({
-                message: "You have not punched in today"
-            });
+            return res.status(400).json({ message: "You have not punched in today" });
         }
 
-        // ❌ Already punched out
         if (attendance.punchOut) {
-            return res.status(400).json({
-                message: "You already punched out today"
-            });
+            return res.status(400).json({ message: "You already punched out today" });
         }
 
         const now = new Date();
         attendance.punchOut = now;
 
-        // ⏱ Calculate work duration
-        const diff = now - attendance.punchIn;
-        let minutes = Math.floor(diff / (1000 * 60));
-        // Product-level logic: deduct 1 hour break if they worked more than 5 hours (300 mins)
-        if (minutes > 300) {
-            minutes -= 60;
-        }
+        // ✅ Calculate hours — no lunch deduction, no complicated logic
+        const { minutes, hoursFloat } = calculateWorkingHours(attendance.punchIn, now);
         attendance.workMinutes = Math.max(0, minutes);
 
-        // 🔥 NEW: Status Logic
-        const shiftEndStr = process.env.SHIFT_END_TIME || "20:30";
-        const [hour, minute] = shiftEndStr.split(":").map(Number);
-
-        const shiftEnd = new Date();
-        shiftEnd.setHours(hour || 20, minute || 30, 0, 0);
-
-        // Late punch-out detection
-        if (now > shiftEnd) {
-            attendance.isLatePunchOut = true;
-        } else {
-            attendance.isLatePunchOut = false;
-        }
-
-        // Minimum work check
-        const minWorkHours = parseInt(process.env.MIN_WORK_HOURS_FOR_FULL_DAY) || 8;
-        const minWorkMinutes = minWorkHours * 60;
-
-        if (attendance.workMinutes < minWorkMinutes) {
-            attendance.status = "half-day";
+        // ✅ Status: half-day or absent if hours < 5, otherwise stay "present"
+        if (hoursFloat < 5) {
+            attendance.status = hoursFloat >= 2.5 ? "half-day" : "absent";
         } else {
             attendance.status = "present";
         }
 
-        // Reset missedPunchOut if user manually punched out
         attendance.missedPunchOut = false;
+        attendance.autoPunchOut = false;
 
         await attendance.save();
 
-        // 🚀 Real-time updates
-        const io = req.app.get("io");
-        io.emit("dashboard-update");
-        io.emit("attendance-update");
+        req.app.get("io").emit("dashboard-update");
+        req.app.get("io").emit("attendance-update");
 
-        res.json({
-            message: "Punch out successful",
-            attendance
-        });
+        res.json({ message: "Punch out successful", attendance });
 
     } catch (error) {
-        res.status(500).json({
-            message: "Server error",
-            error: error.message
-        });
+        res.status(500).json({ message: "Server error", error: error.message });
     }
 };
 
+// ─── Get My Attendance ────────────────────────────────────────────────────────
 const getMyAttendance = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // Auto close previous day missed punch-outs before returning
+        // Fix any previous days where punch-out was missed
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        const missed = await Attendance.find(
-            {
-                user: userId,
-                date: { $lt: today },
-                punchIn: { $exists: true, $ne: null },
-                punchOut: null,
-                missedPunchOut: { $ne: true }
-            }
-        );
+        const missed = await Attendance.find({
+            user: userId,
+            date: { $lt: today },
+            punchIn: { $exists: true, $ne: null },
+            punchOut: null,
+            missedPunchOut: { $ne: true }
+        });
 
-        if (missed.length > 0) {
-            const targetHour = parseInt(process.env.AUTO_PUNCH_OUT_TARGET_HOUR) || 19;
-            for (let record of missed) {
-                const punchOutTime = new Date(record.date);
-                punchOutTime.setHours(targetHour, 0, 0, 0);
+        for (let record of missed) {
+            // ✅ Cap hours at 7 PM of that day
+            const { effectivePunchOut, minutes, hoursFloat } = calculateWorkingHours(record.punchIn, null);
 
-                record.punchOut = punchOutTime;
-                record.missedPunchOut = true;
+            record.punchOut = effectivePunchOut;           // stored as 7 PM of that day
+            record.missedPunchOut = true;
+            record.autoPunchOut = true;
+            record.workMinutes = Math.max(0, minutes);
+            record.status = "missed punch-out";            // always "missed punch-out" for these
 
-                const diff = punchOutTime - record.punchIn;
-                let minutes = Math.floor(diff / (1000 * 60));
-
-                // Strictly subtract 1 hour (60 minutes) for lunch break
-                minutes -= 60;
-
-                record.workMinutes = Math.max(0, minutes);
-
-                // Update status
-                const minWorkHours = parseInt(process.env.MIN_WORK_HOURS_FOR_FULL_DAY) || 8;
-                const minWorkMinutes = minWorkHours * 60;
-
-                if (record.workMinutes < minWorkMinutes) {
-                    record.status = "half-day";
-                } else {
-                    record.status = "present";
-                }
-
-                await record.save();
-            }
+            await record.save();
         }
 
         const attendance = await Attendance.find({ user: userId })
@@ -366,13 +194,11 @@ const getMyAttendance = async (req, res) => {
         res.json(attendance);
 
     } catch (error) {
-        res.status(500).json({
-            message: "Server error",
-            error: error.message
-        });
+        res.status(500).json({ message: "Server error", error: error.message });
     }
 };
 
+// ─── Get Today's Status ───────────────────────────────────────────────────────
 const getTodayStatus = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -384,26 +210,14 @@ const getTodayStatus = async (req, res) => {
         });
 
         if (!attendance) {
-            return res.json({
-                punchIn: null,
-                punchOut: null,
-                workMinutes: 0
-            });
+            return res.json({ punchIn: null, punchOut: null, workMinutes: 0 });
         }
 
         res.json(attendance);
 
     } catch (error) {
-        res.status(500).json({
-            message: "Server error",
-            error: error.message
-        });
+        res.status(500).json({ message: "Server error", error: error.message });
     }
 };
 
-module.exports = {
-    punchIn,
-    punchOut,
-    getMyAttendance,
-    getTodayStatus
-};
+module.exports = { punchIn, punchOut, getMyAttendance, getTodayStatus };

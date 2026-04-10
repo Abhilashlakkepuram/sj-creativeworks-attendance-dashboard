@@ -13,16 +13,26 @@ const formatDate = (dt) =>
   new Date(dt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
 const calcHours = (punchIn, punchOut) => {
-  if (!punchIn || !punchOut) return null;
-  const diff = new Date(punchOut) - new Date(punchIn);
-  const h = Math.floor(diff / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
+  if (!punchIn) return null;
+  
+  let end = punchOut ? new Date(punchOut) : null;
+  
+  // Rule 2: If no punch-out, cap at 7:00 PM (19:00)
+  if (!end) {
+    end = new Date(punchIn);
+    end.setHours(19, 0, 0, 0);
+  }
+
+  const diff = end - new Date(punchIn);
+  const totalMinutes = Math.max(0, Math.floor(diff / 60000));
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
   return `${h}h ${m}m`;
 };
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 const StatusBadge = ({ status, missedPunchOut }) => {
-  const displayStatus = missedPunchOut ? "missed punch-out" : status;
+  const s = (missedPunchOut ? "missed punch-out" : (status || "absent")).toLowerCase();
   
   const base = "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider";
   const styles = {
@@ -34,14 +44,14 @@ const StatusBadge = ({ status, missedPunchOut }) => {
     "missed punch-out": "bg-orange-50 text-orange-700 border border-orange-200",
   };
   return (
-    <span className={`${base} ${styles[displayStatus] || styles.absent}`}>
-      {displayStatus === "present" && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />}
-      {displayStatus === "late" && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />}
-      {displayStatus === "late present" && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />}
-      {displayStatus === "absent" && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />}
-      {displayStatus === "half-day" && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />}
-      {displayStatus === "missed punch-out" && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />}
-      {displayStatus}
+    <span className={`${base} ${styles[s] || styles.absent}`}>
+      {s === "present" && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />}
+      {s === "late" && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />}
+      {s === "late present" && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />}
+      {s === "absent" && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />}
+      {s === "half-day" && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />}
+      {s === "missed punch-out" && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />}
+      {s}
     </span>
   );
 };
@@ -131,7 +141,8 @@ function EmployeeAttendance() {
   const filtered = data.filter(d => {
     if (filter === "all") return true;
     if (filter === "missed") return d.missedPunchOut;
-    return d.status === filter;
+    if (filter === "late") return d.isLate;
+    return (d.status || "").toLowerCase() === filter.toLowerCase();
   });
 
   // ── PDF Export ────────────────────────────────────────────────────────────
@@ -232,7 +243,7 @@ function EmployeeAttendance() {
 
       {/* ── Filter Tabs ── */}
       <div className="flex gap-2 flex-wrap">
-        {["all", "present", "late", "late present", "absent", "missed"].map(f => (
+        {["all", "present", "late", "absent", "missed"].map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -272,7 +283,8 @@ function EmployeeAttendance() {
               ) : (
                 filtered.map((d) => {
                   const hours = calcHours(d.punchIn, d.punchOut);
-                  const isAbsent = d.status === "absent";
+                  const statusLower = (d.status || "").toLowerCase();
+                  const isAbsent = statusLower === "absent";
                   const isWeekend = new Date(d.date).getDay() === 0;
 
                   return (
@@ -288,23 +300,17 @@ function EmployeeAttendance() {
                         {new Date(d.date).toLocaleDateString("en-IN", { weekday: "short" })}
                       </td>
                       <td className="px-6 py-4 text-slate-600">
-                        {isAbsent ? (
-                          <span className="text-slate-300">—</span>
-                        ) : (
-                          formatTime(d.punchIn)
-                        )}
+                        {formatTime(d.punchIn)}
                       </td>
                       <td className="px-6 py-4 text-slate-600">
-                        {isAbsent ? (
-                          <span className="text-slate-300">—</span>
-                        ) : d.missedPunchOut ? (
+                        {d.missedPunchOut ? (
                           <span className="text-orange-500 font-semibold text-xs">Auto-Closed</span>
                         ) : (
                           formatTime(d.punchOut)
                         )}
                       </td>
                       <td className="px-6 py-4 font-medium text-slate-700">
-                        {hours || <span className="text-slate-300">—</span>}
+                        {hours || (isAbsent ? <span className="text-slate-300">0h 0m</span> : <span className="text-slate-300">—</span>)}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <StatusBadge status={d.status} missedPunchOut={d.missedPunchOut} />

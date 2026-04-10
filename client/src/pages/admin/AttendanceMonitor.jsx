@@ -4,7 +4,7 @@ import { SocketContext } from "../../socket/SocketContext";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const STATUS = ["all", "present", "late", "late present", "absent"];
+const STATUS = ["all", "present", "late", "absent"];
 
 const getLocalISOString = (date) => {
   const d = new Date(date);
@@ -23,16 +23,25 @@ function AttendanceMonitor() {
   const [loading, setLoading] = useState(true);
   const [expandedDates, setExpandedDates] = useState({});
 
-  const calculateHours = (inTime, outTime) => {
-    if (!inTime || !outTime) return "—";
-    const diff = new Date(outTime) - new Date(inTime);
-    let minutes = Math.floor(diff / (1000 * 60));
-    // Product-level logic: deduct 1 hour break if they worked more than 5 hours (300 mins)
-    if (minutes > 300) {
-        minutes -= 60;
+  const calculateHours = (inTime, outTime, workMinutes) => {
+    if (workMinutes !== undefined && workMinutes !== null) {
+        const h = Math.floor(workMinutes / 60);
+        const m = workMinutes % 60;
+        return `${h}h ${m}m`;
     }
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
+    if (!inTime) return "—";
+    
+    let end = outTime ? new Date(outTime) : null;
+    if (!end) {
+        // Rule 2: Cap at 7 PM for missed punchout
+        end = new Date(inTime);
+        end.setHours(19, 0, 0, 0);
+    }
+
+    const diff = end - new Date(inTime);
+    const totalMinutes = Math.max(0, Math.floor(diff / (1000 * 60)));
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
     return `${h}h ${m}m`;
   };
 
@@ -272,7 +281,7 @@ function AttendanceMonitor() {
                       {groupedData[dateKey].filter(r => r.status === 'present').length} Present
                     </span>
                     <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-md">
-                      {groupedData[dateKey].filter(r => ["late", "late present"].includes(r.status)).length} Late
+                      {groupedData[dateKey].filter(r => r.isLate).length} Late
                     </span>
                   </div>
                   <svg
@@ -320,19 +329,31 @@ function AttendanceMonitor() {
                             </td>
                             <td className="p-4 text-center">
                               <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold">
-                                {calculateHours(item.punchIn, item.punchOut)}
+                                {calculateHours(item.punchIn, item.punchOut, item.workMinutes)}
                               </span>
                             </td>
                             <td className="p-4 text-right">
-                              <span className={`inline-flex px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest ${item.status === "absent" ? "bg-rose-50 text-rose-600" :
-                                item.status === "late" ? "bg-amber-50 text-amber-600" :
-                                item.status === "late present" ? "bg-orange-50 text-orange-600" :
-                                item.status === "half-day" ? "bg-blue-50 text-blue-600" :
-                                item.missedPunchOut ? "bg-orange-50 text-orange-600" :
-                                  "bg-emerald-50 text-emerald-600"
-                                }`}>
-                                {item.missedPunchOut ? "missed punch-out" : item.status}
-                              </span>
+                              {(() => {
+                                const s = (item.missedPunchOut ? "missed punch-out" : (item.status || "absent")).toLowerCase();
+                                const isLate = item.isLate;
+                                const styleMap = {
+                                  absent: "bg-rose-50 text-rose-600",
+                                  late: "bg-amber-50 text-amber-600",
+                                  "late present": "bg-orange-50 text-orange-600",
+                                  "half-day": "bg-blue-50 text-blue-600",
+                                  "missed punch-out": "bg-orange-50 text-orange-600",
+                                  present: "bg-emerald-50 text-emerald-600"
+                                };
+                                // If it's present but late, we can still use the late style or a combined one
+                                let displayStyle = styleMap[s] || styleMap.present;
+                                if (s === "present" && isLate) displayStyle = styleMap["late present"];
+
+                                return (
+                                  <span className={`inline-flex px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest ${displayStyle}`}>
+                                    {s} {isLate && "(Late)"}
+                                  </span>
+                                );
+                              })()}
                             </td>
                           </tr>
                         ))}

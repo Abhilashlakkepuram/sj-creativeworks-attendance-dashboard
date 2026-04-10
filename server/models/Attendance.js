@@ -1,3 +1,4 @@
+// models/Attendance.js
 const mongoose = require("mongoose");
 
 const attendanceSchema = new mongoose.Schema({
@@ -28,10 +29,10 @@ const attendanceSchema = new mongoose.Schema({
     default: 0
   },
 
-  // ✅ Added "absent", "half-day" to enum
   status: {
     type: String,
-    enum: ["present", "late", "late present", "absent", "half-day"],
+    // ✅ All lowercase — matches frontend StatusBadge keys exactly
+    enum: ["present", "late present", "half-day", "absent", "missed punch-out"],
     default: "present"
   },
 
@@ -40,15 +41,32 @@ const attendanceSchema = new mongoose.Schema({
     default: false
   },
 
-  // ✅ New: flags employee forgot to punch out
+  isLatePunchOut: {
+    type: Boolean,
+    default: false
+  },
+
   missedPunchOut: {
+    type: Boolean,
+    default: false
+  },
+
+  autoPunchOut: {
     type: Boolean,
     default: false
   }
 
-}, { timestamps: true });
+}, { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
-// Compound Index
+// Virtual for formatted work hours
+attendanceSchema.virtual("workHours").get(function () {
+  if (!this.workMinutes) return "0h 0m";
+  const hours = Math.floor(this.workMinutes / 60);
+  const minutes = this.workMinutes % 60;
+  return `${hours}h ${minutes}m`;
+});
+
+// Compound index: one record per user per day
 attendanceSchema.index({ user: 1, date: 1 }, { unique: true });
 
 module.exports = mongoose.model("Attendance", attendanceSchema);

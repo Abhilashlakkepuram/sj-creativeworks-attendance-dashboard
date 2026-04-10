@@ -3,6 +3,7 @@ const Attendance = require("../models/Attendance");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const { getPagination, formatPagination } = require("../utils/pagination");
+const { calculateWorkingHours } = require("../utils/attendanceHelpers");
 
 // Helper: get start and end of today in LOCAL server time
 const getTodayRangeHelper = () => {
@@ -33,29 +34,12 @@ const autoCloseMissedPunchOuts = async () => {
             const targetHour = parseInt(process.env.AUTO_PUNCH_OUT_TARGET_HOUR) || 19;
             
             for (let record of missed) {
-                const punchOutTime = new Date(record.date);
-                punchOutTime.setHours(targetHour, 0, 0, 0);
+                const { effectivePunchOut, minutes, hoursFloat } = calculateWorkingHours(record.punchIn, null);
                 
-                record.punchOut = punchOutTime;
+                record.punchOut = effectivePunchOut;
                 record.missedPunchOut = true;
-
-                const diff = punchOutTime - record.punchIn;
-                let minutes = Math.floor(diff / (1000 * 60));
-                
-                // Strictly subtract 60 minutes for lunch break
-                minutes -= 60;
-                
                 record.workMinutes = Math.max(0, minutes);
-
-                // Update status
-                const minWorkHours = parseInt(process.env.MIN_WORK_HOURS_FOR_FULL_DAY) || 8;
-                const minWorkMinutes = minWorkHours * 60;
-                
-                if (record.workMinutes < minWorkMinutes) {
-                    record.status = "half-day";
-                } else {
-                    record.status = "present";
-                }
+                record.status = "missed punch-out";
 
                 await record.save();
             }
@@ -162,7 +146,7 @@ const getUserAttendance = async (req, res) => {
             summary: {
                 total: allDays.length,
                 present: allDays.filter(d => ["present", "late present"].includes(d.status)).length,
-                late: allDays.filter(d => ["late", "late present"].includes(d.status)).length,
+                late: allDays.filter(d => d.isLate).length,
                 absent: allDays.filter(d => d.status === "absent").length,
                 missedPunchOut: allDays.filter(d => d.missedPunchOut).length,
             }
@@ -212,7 +196,7 @@ const getEmployees = async (req, res) => {
                             $filter: {
                                 input: "$attendance",
                                 as: "a",
-                                cond: { $in: ["$$a.status", ["late", "late present"]] }
+                                cond: { $eq: ["$$a.isLate", true] }
                             }
                         }
                     },
@@ -385,8 +369,8 @@ const getAllAttendance = async (req, res) => {
             };
         }
 
-        if (status === "present") filter.status = { $in: ["present", "late", "late present", "half-day"] };
-        if (status === "late") filter.status = { $in: ["late", "late present"] };
+        if (status === "present") filter.status = "present";
+        if (status === "late") filter.isLate = true;
 
         let datesToCheck = [];
         if (date) {
@@ -485,7 +469,7 @@ const getDashboardStats = async (req, res) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const todayAttendance = await Attendance.countDocuments({ date: today });
-        const lateEmployees = await Attendance.countDocuments({ date: today, status: { $in: ["late", "late present"] } });
+        const lateEmployees = await Attendance.countDocuments({ date: today, isLate: true });
         res.json({ totalEmployees, todayAttendance, lateEmployees });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
