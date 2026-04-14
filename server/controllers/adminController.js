@@ -345,7 +345,7 @@ const rejectUser = async (req, res) => {
 
 const getAllAttendance = async (req, res) => {
     try {
-        const { status, date, search, page = 1, limit = 10 } = req.query;
+        const { status, date, search, page = 1, limit = 1000 } = req.query; // Increase default limit for admin tools
         const skip = (page - 1) * limit;
         let filter = {};
 
@@ -371,6 +371,7 @@ const getAllAttendance = async (req, res) => {
 
         if (status === "present") filter.status = "present";
         if (status === "late") filter.isLate = true;
+        // If status is "all" or undefined, we don't strict filter by status
 
         let datesToCheck = [];
         if (date) {
@@ -401,35 +402,60 @@ const getAllAttendance = async (req, res) => {
             }
         }
 
-        if (status === "absent") {
-            let allAbsentRecords = [];
+        const rangeStart = datesToCheck[datesToCheck.length - 1].start;
+        const rangeEnd = datesToCheck[0].end;
 
+        // Get all real DB records matching our range and filter
+        const existingAttendances = await Attendance.find({
+            date: { $gte: rangeStart, $lte: rangeEnd },
+            ...filter
+        }).populate({ path: "user", match: userFilter, select: "name email role" }).lean();
+        
+        let allRecords = existingAttendances.filter(a => a.user !== null); // Remove if user didn't match search filter
+
+        // Generate absent records if status is "absent" or "all"
+        if (!status || status === "all" || status === "absent") {
             const candidates = await User.find({
                 ...userFilter,
                 role: { $ne: "admin" },
                 isApproved: true
-            }).select("name email role").lean();
+            }).select("name email role createdAt").lean();
 
-            const rangeStart = datesToCheck[datesToCheck.length - 1].start;
-            const rangeEnd = datesToCheck[0].end;
-
-            const existingAttendances = await Attendance.find({
+            // We need to check who was actually present (regardless of filter) to calculate true absences
+            const allRangeAttendances = await Attendance.find({
                 date: { $gte: rangeStart, $lte: rangeEnd }
             }).select("user date").lean();
 
             const presenceMap = {};
-            existingAttendances.forEach(a => {
+            allRangeAttendances.forEach(a => {
                 const dateKey = a.date.toISOString().split("T")[0];
                 if (!presenceMap[dateKey]) presenceMap[dateKey] = new Set();
                 presenceMap[dateKey].add(a.user.toString());
             });
 
+            let absentRecords = [];
             for (const range of datesToCheck) {
+                const isSunday = range.start.getDay() === 0;
+                const isSaturday = range.start.getDay() === 6;
+                const dayOfMonth = range.start.getDate();
+                const isSecondSat = isSaturday && dayOfMonth >= 8 && dayOfMonth <= 14;
+
+                // Do not generate absent records for holidays/weekends
+                if (isSunday || isSecondSat) continue;
+
                 const dateKey = range.start.toISOString().split("T")[0];
                 const presentSet = presenceMap[dateKey] || new Set();
-                const absentForThisDay = candidates.filter(u => !presentSet.has(u._id.toString()));
 
-                allAbsentRecords = allAbsentRecords.concat(
+                const validCandidates = candidates.filter(u => {
+                    if (!u.createdAt) return false;
+                    const cDate = new Date(u.createdAt);
+                    cDate.setHours(0,0,0,0);
+                    return cDate <= range.start;
+                });
+
+                const absentForThisDay = validCandidates.filter(u => !presentSet.has(u._id.toString()));
+
+                absentRecords = absentRecords.concat(
                     absentForThisDay.map(u => ({
                         _id: `absent-${u._id}-${range.start.toISOString()}`,
                         user: { _id: u._id, name: u.name, email: u.email, role: u.role },
@@ -437,26 +463,26 @@ const getAllAttendance = async (req, res) => {
                         date: range.start,
                         punchIn: null,
                         punchOut: null,
-                        workHours: "0.00"
+                        workMinutes: 0
                     }))
                 );
             }
 
-            const total = allAbsentRecords.length;
-            const paginated = allAbsentRecords.slice(skip, skip + parseInt(limit));
-            return res.json({ success: true, data: paginated, total, page: Number(page), totalPages: Math.ceil(total / limit) });
+            if (status === "absent") {
+                allRecords = absentRecords; // Only show absent
+            } else {
+                allRecords = allRecords.concat(absentRecords); // Merge present/late/missed + absent
+            }
         }
 
-        const attendance = await Attendance.find(filter)
-            .populate({ path: "user", match: userFilter, select: "name email role" })
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(parseInt(limit));
+        // Sort all records by date descending
+        allRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-        const filtered = attendance.filter(a => a.user !== null);
-        const total = await Attendance.countDocuments(filter);
+        const total = allRecords.length;
+        const parsedLimit = parseInt(limit) || 1000;
+        const paginated = allRecords.slice(skip, skip + parsedLimit);
 
-        res.json({ success: true, data: filtered, total, page: Number(page), totalPages: Math.ceil(total / limit) });
+        res.json({ success: true, data: paginated, total, page: Number(page), totalPages: Math.ceil(total / parsedLimit) });
 
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });

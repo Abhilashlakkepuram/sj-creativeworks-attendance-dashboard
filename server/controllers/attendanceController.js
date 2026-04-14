@@ -162,7 +162,7 @@ const getMyAttendance = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // Fix any previous days where punch-out was missed
+        // 1. Fix any previous days where punch-out was missed
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
@@ -193,6 +193,64 @@ const getMyAttendance = async (req, res) => {
             await record.save();
         }
 
+        // 2. Automatically generate 'absent' records for missing past workdays
+        const User = require("../models/User");
+        const user = await User.findById(userId);
+
+        if (user && user.createdAt) {
+            let currentDate = new Date(user.createdAt);
+            currentDate.setHours(0, 0, 0, 0);
+
+            const existingRecords = await Attendance.find({
+                user: userId,
+                date: { $gte: currentDate, $lt: today }
+            });
+
+            // Helper to get YYYY-MM-DD in local time
+            const getLocalYMD = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            const existingDateSet = new Set(existingRecords.map(r => getLocalYMD(r.date)));
+
+            const absentRecordsToCreate = [];
+
+            while (currentDate < today) {
+                const isSunday = currentDate.getDay() === 0;
+                const isSaturday = currentDate.getDay() === 6;
+                const dayOfMonth = currentDate.getDate();
+                
+                // A Saturday is the 2nd Saturday if its date is between 8 and 14 inclusive
+                const isSecondSat = isSaturday && dayOfMonth >= 8 && dayOfMonth <= 14;
+
+                const ymd = getLocalYMD(currentDate);
+
+                if (!isSunday && !isSecondSat) {
+                    if (!existingDateSet.has(ymd)) {
+                        absentRecordsToCreate.push({
+                            user: userId,
+                            date: new Date(currentDate), // Clone exact date at 00:00:00 local time
+                            status: "absent",
+                            workMinutes: 0
+                        });
+                    }
+                }
+
+                // Move to next day
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            if (absentRecordsToCreate.length > 0) {
+                // Use bulkWrite with upsert to prevent unique constraints errors and race conditions
+                const bulkOps = absentRecordsToCreate.map(record => ({
+                    updateOne: {
+                        filter: { user: record.user, date: record.date },
+                        update: { $setOnInsert: record },
+                        upsert: true
+                    }
+                }));
+                await Attendance.bulkWrite(bulkOps);
+            }
+        }
+
+        // 3. Return the updated list of attendances
         const attendance = await Attendance.find({ user: userId })
             .sort({ date: -1 })
             .limit(30);

@@ -25,9 +25,9 @@ function AttendanceMonitor() {
 
   const calculateHours = (inTime, outTime, workMinutes) => {
     if (workMinutes !== undefined && workMinutes !== null) {
-        const h = Math.floor(workMinutes / 60);
-        const m = workMinutes % 60;
-        return `${h}h ${m}m`;
+      const h = Math.floor(workMinutes / 60);
+      const m = workMinutes % 60;
+      return `${h}h ${m}m`;
     }
     if (!inTime || !outTime) return "—";
     const diff = new Date(outTime) - new Date(inTime);
@@ -46,6 +46,7 @@ function AttendanceMonitor() {
       if (status !== "all") params.append("status", status);
       if (search) params.append("search", search);
       if (date) params.append("date", date);
+      params.append("limit", "1000"); // Ensure we request all records for the monitor
 
       const res = await api.get(`/admin/attendance?${params}`);
       const payloadData = res.data.data || [];
