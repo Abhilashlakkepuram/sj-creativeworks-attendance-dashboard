@@ -149,6 +149,7 @@ const approveLeave = async (req, res) => {
 // ─────────────────────────────────────────────
 const rejectLeave = async (req, res) => {
   try {
+    const { rejectionReason } = req.body || {};
     const leave = await Leave.findById(req.params.id).populate("user");
 
     if (!leave) {
@@ -164,17 +165,23 @@ const rejectLeave = async (req, res) => {
     }
 
     leave.status = "rejected";
+    if (rejectionReason) {
+      leave.rejectionReason = rejectionReason;
+    }
     await leave.save();
 
     // 🚀 Real-time update
     req.app.get("io").emit("leave-update");
+
+    let notifyMsg = `Your leave request from ${new Date(leave.startDate).toLocaleDateString()} has been rejected`;
+    if (rejectionReason) notifyMsg += `. Reason: ${rejectionReason}`;
 
     // 📩 Notify employee
     await createNotification(
       req.app,
       leave.user._id,
       "leave",
-      `Your leave request from ${new Date(leave.startDate).toLocaleDateString()} has been rejected`,
+      notifyMsg,
       "/employee/leaves"
     );
 

@@ -115,7 +115,7 @@ function Employees() {
           <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Employee Management</h2>
           <p className="text-slate-500 text-sm mt-1">Manage your team members and their access levels.</p>
         </div>
-        {/* <button
+        <button
           onClick={() => setShowAddModal(true)}
           className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-2xl font-bold hover:bg-primary-700 transition shadow-lg shadow-primary-100"
         >
@@ -123,11 +123,11 @@ function Employees() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
           Add New Employee
-        </button> */}
+        </button>
       </div>
 
       {/* Mini Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           {
             label: "Total Employees",
@@ -158,17 +158,7 @@ function Employees() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
               </svg>
             )
-          },
-          {
-            label: "Pending Approval",
-            value: stats.pending,
-            color: "text-amber-600 bg-amber-50",
-            icon: (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-            )
-          },
+          }
         ].map(s => (
           <div key={s.label} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-primary-200 transition-all duration-300">
             <div>

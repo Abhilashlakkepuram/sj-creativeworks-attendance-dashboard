@@ -22,6 +22,10 @@ const leaveSchema = new mongoose.Schema({
     type: String,
     enum: ["pending", "approved", "rejected"],
     default: "pending"
+  },
+  rejectionReason: {
+    type: String,
+    default: ""
   }
 }, { timestamps: true });
 

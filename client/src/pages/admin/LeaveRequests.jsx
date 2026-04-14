@@ -31,9 +31,10 @@ function LeaveRequests() {
 
   const rejectLeave = async (id) => {
     if (!window.confirm("Are you sure you want to reject this leave request?")) return;
+    const rejectionReason = window.prompt("Optional: Enter a reason for rejecting this leave:") || "";
     setLoading(true);
     try {
-      await api.patch(`/leaves/reject/${id}`);
+      await api.patch(`/leaves/reject/${id}`, { rejectionReason });
       fetchLeaves();
     } catch {
       alert("Error rejecting leave");
@@ -130,16 +131,32 @@ function LeaveRequests() {
               </div>
 
               {/* Reason */}
-              <div className="flex-1 flex flex-col">
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                  <span className="w-4 h-px bg-slate-200"></span>
-                  Reason for Leave
+              <div className="flex-1 flex flex-col gap-3">
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <span className="w-4 h-px bg-slate-200"></span>
+                    Reason for Leave
+                  </div>
+                  <div className="bg-slate-50/30 rounded-2xl p-4 border border-slate-50">
+                    <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line italic">
+                      "{leave.reason}"
+                    </p>
+                  </div>
                 </div>
-                <div className="bg-slate-50/30 rounded-2xl p-4 border border-slate-50 flex-1">
-                  <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line italic">
-                    "{leave.reason}"
-                  </p>
-                </div>
+
+                {leave.status === "rejected" && leave.rejectionReason && (
+                  <div>
+                    <div className="text-[10px] font-bold text-rose-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                      <span className="w-4 h-px bg-rose-200"></span>
+                      Rejection Reason
+                    </div>
+                    <div className="bg-rose-50/30 rounded-2xl p-4 border border-rose-50">
+                      <p className="text-rose-600 text-sm leading-relaxed whitespace-pre-line italic">
+                        "{leave.rejectionReason}"
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Footer Actions */}

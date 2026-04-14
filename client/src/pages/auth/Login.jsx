@@ -132,10 +132,7 @@ const Login = () => {
           </form>
 
           <p className="mt-8 text-center text-sm text-slate-600">
-            Trouble logging in?{" "}
-            <Link to="/register" className="font-medium text-primary-600 hover:text-primary-500 transition-colors">
-              register for access
-            </Link>
+            Trouble logging in? Contact your administrator.
           </p>
         </div>
       </div>

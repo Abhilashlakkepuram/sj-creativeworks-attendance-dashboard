@@ -240,21 +240,7 @@ function Dashboard() {
         </svg>
       ),
       bg: "from-rose-500 to-rose-700",
-    },
-    {
-      label: "Pending Approvals",
-      value: pending.length,
-      subtext: "New staff requests",
-      onClick: () => {
-        pendingSectionRef.current?.scrollIntoView({ behavior: "smooth" });
-      },
-      icon: (
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-        </svg>
-      ),
-      bg: "from-amber-500 to-amber-700",
-    },
+    }
   ];
 
   return (
@@ -289,7 +275,7 @@ function Dashboard() {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {statsLoading
           ? Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
           : statCards.map((card) => (
@@ -297,59 +283,7 @@ function Dashboard() {
           ))}
       </div>
 
-      {/* Pending Approvals Section */}
-      <div ref={pendingSectionRef} className="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden scroll-mt-8">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center">
-              <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-semibold text-slate-800 text-sm">Pending Account Requests</h3>
-              <p className="text-xs text-slate-500">Review and approve new signups</p>
-            </div>
-          </div>
-          {pending.length > 0 && (
-            <span className="px-2.5 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full">
-              {pending.length} pending
-            </span>
-          )}
-        </div>
-
-        <div className="p-6">
-          {statsLoading ? (
-            <div className="flex flex-col gap-3">
-              {[1, 2].map((i) => (
-                <div key={i} className="h-16 bg-slate-100 rounded-xl animate-pulse" />
-              ))}
-            </div>
-          ) : pending.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mb-4">
-                <svg className="w-8 h-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <p className="font-semibold text-slate-700">All caught up!</p>
-              <p className="text-sm text-slate-500 mt-1">No pending account requests at this time.</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {pending.map((u) => (
-                <PendingCard
-                  key={u._id}
-                  user={u}
-                  onApprove={handleApprove}
-                  onReject={handleReject}
-                  loading={actionLoading}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Pending Approvals Section Removed */}
     </div>
   );
 }
