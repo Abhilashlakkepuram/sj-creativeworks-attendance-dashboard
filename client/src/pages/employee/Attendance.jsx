@@ -13,20 +13,10 @@ const formatDate = (dt) =>
   new Date(dt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
 const calcHours = (punchIn, punchOut) => {
-  if (!punchIn) return null;
-  
-  let end = punchOut ? new Date(punchOut) : null;
-  
-  // Rule 2: If no punch-out, cap at 7:00 PM (19:00)
-  if (!end) {
-    end = new Date(punchIn);
-    end.setHours(19, 0, 0, 0);
-  }
-
-  const diff = end - new Date(punchIn);
-  const totalMinutes = Math.max(0, Math.floor(diff / 60000));
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
+  if (!punchIn || !punchOut) return null;
+  const diff = new Date(punchOut) - new Date(punchIn);
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
   return `${h}h ${m}m`;
 };
 

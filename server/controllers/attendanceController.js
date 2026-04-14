@@ -175,10 +175,16 @@ const getMyAttendance = async (req, res) => {
         });
 
         for (let record of missed) {
-            // ✅ Cap hours at 7 PM of that day
-            const { effectivePunchOut, minutes, hoursFloat } = calculateWorkingHours(record.punchIn, null);
+            // ✅ Record punch out as 8 PM but calculate up to 7 PM max
+            const autoPunchOutTime = new Date(record.punchIn);
+            autoPunchOutTime.setHours(20, 0, 0, 0);
 
-            record.punchOut = effectivePunchOut;           // stored as 7 PM of that day
+            const maxWorkTime = new Date(record.punchIn);
+            maxWorkTime.setHours(19, 0, 0, 0);
+
+            const { minutes, hoursFloat } = calculateWorkingHours(record.punchIn, maxWorkTime);
+
+            record.punchOut = autoPunchOutTime;            // stored as 8 PM of that day
             record.missedPunchOut = true;
             record.autoPunchOut = true;
             record.workMinutes = Math.max(0, minutes);

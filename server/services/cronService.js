@@ -39,9 +39,13 @@ const initAutoPunchOutCron = (io) => {
       const autoPunchOutTime = new Date(today);
       autoPunchOutTime.setHours(20, 0, 0, 0);
 
+      // Cap working hours calculation at 7:00 PM
+      const maxWorkTime = new Date(today);
+      maxWorkTime.setHours(19, 0, 0, 0);
+
       for (let record of missed) {
-        // ✅ Rule 2 & 3: recorded at 8 PM but calculated up to 7 PM
-        const { minutes, hoursFloat } = calculateWorkingHours(record.punchIn, autoPunchOutTime, true);
+        // ✅ Calculate hours from punch-in to 7 PM maximum
+        const { minutes, hoursFloat } = calculateWorkingHours(record.punchIn, maxWorkTime);
 
         record.punchOut = autoPunchOutTime;
         record.missedPunchOut = true;
@@ -51,12 +55,12 @@ const initAutoPunchOutCron = (io) => {
 
         await record.save();
 
-        // ✅ Rule 3: Correct notification message and type
+        // ✅ Send warning notification to the employee
         await Notification.create({
           user: record.user._id,
           title: "Missed Punch-Out",
-          message: "You haven't punched out. Auto punch-out recorded at 8:00 PM.",
-          type: "WARNING",
+          message: `You forgot to punch out today. Your attendance has been auto-closed at 8:00 PM (${Math.floor(minutes / 60)}h ${minutes % 60}m recorded).`,
+          type: "warning",
           link: "/attendance"
         });
 

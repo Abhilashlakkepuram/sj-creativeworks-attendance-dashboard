@@ -29,19 +29,11 @@ function AttendanceMonitor() {
         const m = workMinutes % 60;
         return `${h}h ${m}m`;
     }
-    if (!inTime) return "—";
-    
-    let end = outTime ? new Date(outTime) : null;
-    if (!end) {
-        // Rule 2: Cap at 7 PM for missed punchout
-        end = new Date(inTime);
-        end.setHours(19, 0, 0, 0);
-    }
-
-    const diff = end - new Date(inTime);
-    const totalMinutes = Math.max(0, Math.floor(diff / (1000 * 60)));
-    const h = Math.floor(totalMinutes / 60);
-    const m = totalMinutes % 60;
+    if (!inTime || !outTime) return "—";
+    const diff = new Date(outTime) - new Date(inTime);
+    let minutes = Math.floor(diff / (1000 * 60));
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
     return `${h}h ${m}m`;
   };
 
