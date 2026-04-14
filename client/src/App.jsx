@@ -32,7 +32,7 @@ import EmployeeHolidays from "./pages/employee/Holidays";
 import Chat from "./pages/employee/Chat";
 import Notifications from "./pages/Notifications";
 import DailyReport from "./pages/employee/DailyReport";
-
+import Profile from "./pages/employee/Profile";
 
 // 🔐 Role Protection
 function RequireRole({ roleNeeded, children }) {
@@ -104,6 +104,7 @@ function AppRoutes() {
         <Route path="chat" element={<Chat />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="daily-report" element={<DailyReport />} />
+        <Route path="profile" element={<Profile />} />
       </Route>
 
       {/* Fallback */}
@@ -118,11 +119,11 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <SocketProvider>
-        <BrowserRouter>
+      <BrowserRouter>
+        <SocketProvider>
           <AppRoutes />
-        </BrowserRouter>
-      </SocketProvider>
+        </SocketProvider>
+      </BrowserRouter>
     </AuthProvider>
   );
 }

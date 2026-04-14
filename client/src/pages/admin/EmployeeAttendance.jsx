@@ -98,9 +98,9 @@ function EmployeeAttendance() {
                     : "-";
 
             return [
-                new Date(d.date).toLocaleDateString(),
-                d.punchIn ? new Date(d.punchIn).toLocaleTimeString() : "-",
-                d.punchOut ? new Date(d.punchOut).toLocaleTimeString() : "-",
+                new Date(d.date).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }),
+                d.punchIn ? new Date(d.punchIn).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }) : "-",
+                d.punchOut ? new Date(d.punchOut).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }) : "-",
                 hours,
                 d.status,
             ];
@@ -202,15 +202,15 @@ function EmployeeAttendance() {
                                 <tr key={d._id} className="hover:bg-slate-50">
 
                                     <td className="px-6 py-4 font-medium">
-                                        {new Date(d.date).toLocaleDateString()}
+                                        {new Date(d.date).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}
                                     </td>
 
                                     <td className="px-6 py-4 text-slate-500">
-                                        {d.punchIn ? new Date(d.punchIn).toLocaleTimeString() : "-"}
+                                        {d.punchIn ? new Date(d.punchIn).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: '2-digit', minute: '2-digit' }) : "-"}
                                     </td>
 
                                     <td className="px-6 py-4 text-slate-500">
-                                        {d.punchOut ? new Date(d.punchOut).toLocaleTimeString() : "-"}
+                                        {d.punchOut ? new Date(d.punchOut).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: '2-digit', minute: '2-digit' }) : "-"}
                                     </td>
 
                                     <td className="px-6 py-4 text-slate-700 font-medium">

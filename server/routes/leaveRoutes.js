@@ -5,6 +5,7 @@ const router = express.Router();
 const {
     requestLeave,
     getLeaves,
+    getMyLeaves,
     approveLeave,
     rejectLeave,
     deleteLeave
@@ -15,6 +16,7 @@ const isAdmin = require("../middleware/adminMiddleware");
 
 
 router.post("/request", verifyToken, requestLeave);
+router.get("/my-leaves", verifyToken, getMyLeaves);
 
 router.get("/all", verifyToken, isAdmin, getLeaves);
 

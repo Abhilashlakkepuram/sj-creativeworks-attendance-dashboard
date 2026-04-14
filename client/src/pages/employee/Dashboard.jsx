@@ -6,7 +6,6 @@ import Badge from "../../components/ui/Badge";
 import { useSocket } from "../../socket/SocketContext";
 import { useAuth } from "../../context/AuthContext";
 import { getLocation } from "../../utils/getLocation";
-import { useAttendanceValidation } from "../../hooks/useAttendanceValidation";
 
 function Dashboard() {
   const { user } = useAuth();
@@ -19,8 +18,6 @@ function Dashboard() {
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
   const [announcements, setAnnouncements] = useState([]);
   const [announcementsLoading, setAnnouncementsLoading] = useState(false);
-
-  const { status: validationStatus, message } = useAttendanceValidation();
 
   // 🔔 Socket
   useEffect(() => {
@@ -198,17 +195,7 @@ function Dashboard() {
         </Badge>
       </div>
 
-      {/* 🔥 VALIDATION UI (NEW) */}
-      {/* <div
-        className={`p-4 rounded-xl font-medium ${validationStatus === "success"
-          ? "bg-green-50 text-green-700"
-          : validationStatus === "error"
-            ? "bg-red-50 text-red-700"
-            : "bg-yellow-50 text-yellow-700"
-          }`}
-      >
-        {message}
-      </div> */}
+      {/* 🔥 VALIDATION UI REMOVED */}
 
       {/* 🔹 Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -272,18 +259,16 @@ function Dashboard() {
 
         <Card className="hover:shadow-lg transition-shadow duration-300">
           {/* ⏱️ Today's Log */}
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                Today's Log{" "}
-                {status === "Punched In" && (
-                  <span className="text-xs text-green-600 ml-2">
-                    ● Live
-                  </span>
-                )}
-              </CardTitle>
-            </CardHeader>
-          </Card>
+          <CardHeader>
+            <CardTitle>
+              Today's Log{" "}
+              {status === "Punched In" && (
+                <span className="text-xs text-green-600 ml-2">
+                  ● Live
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
           <CardContent className="flex flex-col justify-center ">
             <div className="text-center">
               <span className="block text-4xl font-bold text-slate-800 tracking-tight">

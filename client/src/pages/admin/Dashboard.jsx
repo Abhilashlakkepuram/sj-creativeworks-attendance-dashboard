@@ -277,7 +277,7 @@ function Dashboard() {
       {/* Stat Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {statsLoading
-          ? Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
+          ? Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
           : statCards.map((card) => (
             <StatCard key={card.label} card={card} onClick={card.onClick} />
           ))}

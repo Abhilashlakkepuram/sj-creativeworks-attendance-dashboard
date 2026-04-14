@@ -96,6 +96,26 @@ const getLeaves = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────
+// 📌 Employee View My Leaves
+// ─────────────────────────────────────────────
+const getMyLeaves = async (req, res) => {
+  try {
+    const leaves = await Leave.find({ user: req.user.id }).sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: leaves,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
+// ─────────────────────────────────────────────
 // 📌 Approve Leave
 // ─────────────────────────────────────────────
 const approveLeave = async (req, res) => {
@@ -245,6 +265,7 @@ const deleteLeave = async (req, res) => {
 module.exports = {
   requestLeave,
   getLeaves,
+  getMyLeaves,
   approveLeave,
   rejectLeave,
   deleteLeave,
