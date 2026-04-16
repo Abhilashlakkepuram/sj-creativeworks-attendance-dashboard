@@ -32,7 +32,7 @@ const attendanceSchema = new mongoose.Schema({
   status: {
     type: String,
     // ✅ All lowercase — matches frontend StatusBadge keys exactly
-    enum: ["present", "late present", "half-day", "absent", "missed punch-out"],
+    enum: ["present", "late", "half-day", "absent", "missed punch-out"],
     default: "present"
   },
 

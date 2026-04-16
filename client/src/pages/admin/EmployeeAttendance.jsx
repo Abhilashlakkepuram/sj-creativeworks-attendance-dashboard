@@ -12,16 +12,19 @@ function EmployeeAttendance() {
     const [data, setData] = useState([]);
     const [employee, setEmployee] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+    const [summary, setSummary] = useState(null);
 
     // ───────────────── FETCH DATA ─────────────────
     const fetchData = async () => {
         try {
             setLoading(true);
 
-            const res = await api.get(`/admin/attendance/user/${id}`);
-            const attendanceData = res.data.data || res.data;
+            const res = await api.get(`/admin/attendance/user/${id}?month=${month}`);
+            const attendanceData = res.data.data || [];
 
             setData(attendanceData);
+            setSummary(res.data.summary);
 
             // Robust employee info extraction
             if (res.data.employee) {
@@ -48,7 +51,7 @@ function EmployeeAttendance() {
 
     useEffect(() => {
         fetchData();
-    }, [id]);
+    }, [id, month]);
 
     // ───────────────── CALCULATE HOURS ─────────────────
     const calculateHours = (inTime, outTime) => {
@@ -152,7 +155,13 @@ function EmployeeAttendance() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3 w-full md:w-auto">
+                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                    <input
+                        type="month"
+                        value={month}
+                        onChange={(e) => setMonth(e.target.value)}
+                        className="bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm focus:ring-2 focus:ring-primary-500 transition-all outline-none"
+                    />
                     <button
                         onClick={() => navigate(`/admin/employee/${id}`)}
                         className="flex-1 md:flex-none bg-white border border-slate-200 text-slate-700 px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-50 transition shadow-sm flex items-center justify-center gap-2"
@@ -175,6 +184,21 @@ function EmployeeAttendance() {
                 </div>
             </div>
 
+            {/* Summary Analytics */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                    { label: "Attendance Rate", val: `${summary?.attendanceRate ?? 0}%`, color: "text-primary-600", bg: "bg-primary-50/30" },
+                    { label: "Late Days", val: summary?.late ?? 0, color: "text-amber-600", bg: "bg-amber-50/30" },
+                    { label: "Half Days", val: summary?.halfDay ?? 0, color: "text-blue-600", bg: "bg-blue-50/30" },
+                    { label: "Missed Punch-Out", val: summary?.missedPunchOut ?? 0, color: "text-rose-600", bg: "bg-rose-50/30" },
+                ].map((card, idx) => (
+                    <div key={idx} className={`${card.bg} p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all`}>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{card.label}</p>
+                        <h3 className={`text-2xl font-black ${card.color}`}>{card.val}</h3>
+                    </div>
+                ))}
+            </div>
+
             {/* Table */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <table className="w-full text-left">
@@ -185,6 +209,7 @@ function EmployeeAttendance() {
                             <th className="px-6 py-4">Punch In</th>
                             <th className="px-6 py-4">Punch Out</th>
                             <th className="px-6 py-4">Hours</th>
+                            <th className="px-6 py-4">Work Type</th>
                             <th className="px-6 py-4 text-right">Status</th>
                         </tr>
                     </thead>
@@ -193,7 +218,7 @@ function EmployeeAttendance() {
 
                         {data.length === 0 ? (
                             <tr>
-                                <td colSpan="5" className="px-6 py-20 text-center text-slate-400">
+                                <td colSpan="6" className="px-6 py-20 text-center text-slate-400">
                                     No records found
                                 </td>
                             </tr>
@@ -217,13 +242,23 @@ function EmployeeAttendance() {
                                         {calculateHours(d.punchIn, d.punchOut)}
                                     </td>
 
+                                    <td className="px-6 py-4">
+                                        <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded-md">
+                                            {d.workType || "Full Day"}
+                                        </span>
+                                    </td>
+
                                     <td className="px-6 py-4 text-right">
                                         <span
-                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${d.status === "absent"
-                                                ? "bg-rose-50 text-rose-600 border border-rose-100"
+                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border shadow-sm ${d.status === "absent"
+                                                ? "bg-rose-50 text-rose-600 border-rose-100"
                                                 : d.status === "late"
-                                                    ? "bg-amber-50 text-amber-600 border border-amber-100"
-                                                    : "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                                                    ? "bg-amber-50 text-amber-600 border-amber-100"
+                                                    : d.status === "half-day"
+                                                        ? "bg-blue-50 text-blue-600 border-blue-100"
+                                                        : d.status === "missed punch-out"
+                                                            ? "bg-orange-50 text-orange-600 border-orange-100"
+                                                            : "bg-emerald-50 text-emerald-600 border-emerald-100"
                                                 }`}
                                         >
                                             {d.status}

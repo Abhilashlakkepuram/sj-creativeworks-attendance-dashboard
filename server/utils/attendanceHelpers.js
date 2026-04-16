@@ -105,8 +105,8 @@ const calculateWorkingHours = (punchIn, punchOut, options = {}) => {
 
 const getAttendanceStatus = (hoursFloat, missedPunchOut) => {
   if (missedPunchOut) return "missed punch-out";
-  if (hoursFloat >= 5) return "present";
-  if (hoursFloat >= 2.5) return "half-day";
+  if (hoursFloat >= 8) return "present";
+  if (hoursFloat >= 4) return "half-day";
   return "absent";
 };
 console.log("🔥 NEW CALCULATION FUNCTION RUNNING");

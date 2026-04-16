@@ -32,13 +32,13 @@ const autoCloseMissedPunchOuts = async () => {
 
         if (missed.length > 0) {
             const targetHour = parseInt(process.env.AUTO_PUNCH_OUT_TARGET_HOUR, 10) || 19;
-            
+
             for (let record of missed) {
                 const { effectivePunchOut, minutes } = calculateWorkingHours(record.punchIn, null, {
                     timeZone: process.env.TIMEZONE,
                     targetHour
                 });
-                
+
                 record.punchOut = effectivePunchOut;
                 record.missedPunchOut = true;
                 record.autoPunchOut = true;
@@ -62,7 +62,7 @@ const autoCloseMissedPunchOuts = async () => {
 const getUserAttendance = async (req, res) => {
     try {
         const userId = req.params.id;
-        const { page = 1, limit = 30 } = req.query;
+        const { page = 1, limit = 30, month } = req.query;
 
         // Auto-close any missed punch-outs before fetching
         await autoCloseMissedPunchOuts();
@@ -73,8 +73,35 @@ const getUserAttendance = async (req, res) => {
             return res.status(404).json({ message: "Employee not found" });
         }
 
-        // Fetch all existing DB records for this employee (no limit — we need all to fill gaps)
-        const existingRecords = await Attendance.find({ user: userId })
+        // Determine default bounds
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const joinDate = new Date(employee.createdAt);
+        joinDate.setHours(0, 0, 0, 0);
+
+        // Define actual range to iterate
+        let rangeStart = joinDate;
+        let rangeEnd = today;
+
+        if (month) {
+            const [year, m] = month.split("-").map(Number);
+            const monthStart = new Date(year, m - 1, 1);
+            const monthEnd = new Date(year, m, 0);
+
+            // Constraints: No dates before join, no dates in future
+            rangeStart = new Date(Math.max(joinDate, monthStart));
+            rangeEnd = new Date(Math.min(today, monthEnd));
+        }
+
+        rangeStart.setHours(0, 0, 0, 0);
+        rangeEnd.setHours(23, 59, 59, 999);
+
+        // Fetch records for this specific range
+        const existingRecords = await Attendance.find({
+            user: userId,
+            date: { $gte: rangeStart, $lte: rangeEnd }
+        })
             .sort({ date: -1 })
             .lean();
 
@@ -85,24 +112,12 @@ const getUserAttendance = async (req, res) => {
             recordMap[key] = r;
         });
 
-        // Determine date range: from employee's join date (or first record) to today
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const joinDate = new Date(employee.createdAt);
-        joinDate.setHours(0, 0, 0, 0);
-
-        // Start from earliest: either first attendance record or join date
-        const firstRecord = existingRecords.length > 0
-            ? new Date(existingRecords[existingRecords.length - 1].date)
-            : joinDate;
-        firstRecord.setHours(0, 0, 0, 0);
-
-        // Build complete day-by-day list from firstRecord to today
+        // Build complete day-by-day list
         const allDays = [];
-        const cursor = new Date(today);
+        rangeEnd.setHours(0, 0, 0, 0); // Reset for loop
+        const cursor = new Date(rangeEnd);
 
-        while (cursor >= firstRecord) {
+        while (cursor >= rangeStart) {
             const key = cursor.toISOString().split("T")[0];
             const dayOfWeek = cursor.getDay(); // 0 = Sunday, 6 = Saturday
 
@@ -133,10 +148,20 @@ const getUserAttendance = async (req, res) => {
             cursor.setDate(cursor.getDate() - 1);
         }
 
+        // Add derived field workType
+        const enhancedDays = allDays.map(d => {
+            let workType = "No Work";
+            if (["present", "late"].includes(d.status)) workType = "Full Day";
+            else if (d.status === "half-day") workType = "Half Day";
+            else if (d.status === "missed punch-out") workType = "Issue";
+
+            return { ...d, workType };
+        });
+
         // Paginate
-        const total = allDays.length;
+        const total = enhancedDays.length;
         const skip = (Number(page) - 1) * Number(limit);
-        const paginated = allDays.slice(skip, skip + Number(limit));
+        const paginated = enhancedDays.slice(skip, skip + Number(limit));
 
         res.json({
             data: paginated,
@@ -150,11 +175,15 @@ const getUserAttendance = async (req, res) => {
             },
             // Summary stats across ALL days (not just current page)
             summary: {
-                total: allDays.length,
-                present: allDays.filter(d => ["present", "late present"].includes(d.status)).length,
-                late: allDays.filter(d => d.isLate).length,
-                absent: allDays.filter(d => d.status === "absent").length,
-                missedPunchOut: allDays.filter(d => d.missedPunchOut).length,
+                total: enhancedDays.length,
+                present: enhancedDays.filter(d => ["present", "late"].includes(d.status)).length,
+                late: enhancedDays.filter(d => d.status === "late").length,
+                halfDay: enhancedDays.filter(d => d.status === "half-day").length,
+                absent: enhancedDays.filter(d => d.status === "absent").length,
+                missedPunchOut: enhancedDays.filter(d => d.status === "missed punch-out" || d.missedPunchOut).length,
+                attendanceRate: enhancedDays.length > 0
+                    ? Math.round((enhancedDays.filter(d => ["present", "late"].includes(d.status)).length / enhancedDays.length) * 100)
+                    : 0
             }
         });
 
@@ -225,7 +254,7 @@ const getEmployees = async (req, res) => {
             {
                 $addFields: {
                     todayStatus: { $ifNull: ["$todayRecord.status", "absent"] },
-                isLate: "$todayRecord.isLate",
+                    isLate: "$todayRecord.isLate",
                     punchIn: "$todayRecord.punchIn",
                     punchOut: "$todayRecord.punchOut"
                 }
@@ -416,7 +445,7 @@ const getAllAttendance = async (req, res) => {
             date: { $gte: rangeStart, $lte: rangeEnd },
             ...filter
         }).populate({ path: "user", match: userFilter, select: "name email role" }).lean();
-        
+
         let allRecords = existingAttendances.filter(a => a.user !== null); // Remove if user didn't match search filter
 
         // Generate absent records if status is "absent" or "all"
@@ -455,7 +484,7 @@ const getAllAttendance = async (req, res) => {
                 const validCandidates = candidates.filter(u => {
                     if (!u.createdAt) return false;
                     const cDate = new Date(u.createdAt);
-                    cDate.setHours(0,0,0,0);
+                    cDate.setHours(0, 0, 0, 0);
                     return cDate <= range.start;
                 });
 

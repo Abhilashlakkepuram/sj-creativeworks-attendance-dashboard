@@ -118,13 +118,15 @@ const punchIn = async (req, res) => {
             return acc;
         }, {});
 
-        const isLate = istTimeParts.hour > 10 || (istTimeParts.hour === 10 && istTimeParts.minute >= 16);
+        const isLate =
+            istTimeParts.hour > 10 ||
+            (istTimeParts.hour === 10 && istTimeParts.minute > 15);
 
         const attendance = new Attendance({
             user: userId,
-            date: start,         // IST midnight, stored as correct UTC instant
-            punchIn: now,        // real UTC instant
-            status: "present",   // recalculated on punch-out
+            date: start,
+            punchIn: now,
+            status: isLate ? "late" : "present", // ✅ FIX
             isLate
         });
 
@@ -135,8 +137,8 @@ const punchIn = async (req, res) => {
 
         await notifyAdmins(
             req.app,
-            "attendance",
-            `${user?.name || "Employee"} has punched in`,
+            isLate ? "warning" : "attendance",
+            `${user?.name || "Employee"} has punched in${isLate ? " late" : ""}`,
             "/admin/attendance"
         );
 
@@ -199,9 +201,9 @@ const punchOut = async (req, res) => {
         attendance.missedPunchOut = false;
         attendance.autoPunchOut = false;
 
-        if (hoursFloat >= 5) {
-            attendance.status = "present";
-        } else if (hoursFloat >= 2.5) {
+        if (hoursFloat >= 8) {
+            attendance.status = attendance.isLate ? "late" : "present";
+        } else if (hoursFloat >= 4) {
             attendance.status = "half-day";
         } else {
             attendance.status = "absent";

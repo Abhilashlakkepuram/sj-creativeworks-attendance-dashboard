@@ -51,6 +51,7 @@ function EmployeeProfile() {
     return {
       present: currentMonth.filter(r => r.status === "present").length,
       late: currentMonth.filter(r => r.status === "late").length,
+      halfDay: currentMonth.filter(r => r.status === "half-day").length,
       total: currentMonth.length
     };
   }, [attendance]);
@@ -200,6 +201,7 @@ function EmployeeProfile() {
                 { label: "Working Days", val: stats.total, color: "text-slate-900", bg: "bg-white", sub: "Current month" },
                 { label: "Present Days", val: stats.present, color: "text-emerald-600", bg: "bg-emerald-50/30", sub: "Confirmed entries" },
                 { label: "Late Arrivals", val: stats.late, color: "text-amber-600", bg: "bg-amber-50/30", sub: "Target improvement" },
+                { label: "Half Days", val: stats.halfDay, color: "text-blue-600", bg: "bg-blue-50/30", sub: "Policy compliance" },
               ].map((item, idx) => (
                 <div key={idx} className={`${item.bg} rounded-3xl p-6 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all duration-300`}>
                   <div>

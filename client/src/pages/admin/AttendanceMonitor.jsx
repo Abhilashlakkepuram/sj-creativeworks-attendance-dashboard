@@ -4,7 +4,7 @@ import { SocketContext } from "../../socket/SocketContext";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const STATUS = ["all", "present", "late", "absent"];
+const STATUS = ["all", "present", "late", "half-day", "absent", "missed"];
 
 const getLocalISOString = (date) => {
   const d = new Date(date);
@@ -271,10 +271,13 @@ function AttendanceMonitor() {
                 <div className="flex items-center gap-4">
                   <div className="hidden sm:flex gap-2">
                     <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
-                      {groupedData[dateKey].filter(r => r.status === 'present').length} Present
+                      {groupedData[dateKey].filter(r => ["present", "late"].includes(r.status)).length} Present
                     </span>
                     <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-md">
-                      {groupedData[dateKey].filter(r => r.isLate).length} Late
+                      {groupedData[dateKey].filter(r => r.status === 'late').length} Late
+                    </span>
+                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
+                      {groupedData[dateKey].filter(r => r.status === 'half-day').length} Half-Day
                     </span>
                   </div>
                   <svg
@@ -327,23 +330,19 @@ function AttendanceMonitor() {
                             </td>
                             <td className="p-4 text-right">
                               {(() => {
-                                const s = (item.missedPunchOut ? "missed punch-out" : (item.status || "absent")).toLowerCase();
-                                const isLate = item.isLate;
+                                const s = (item.status || "absent").toLowerCase();
                                 const styleMap = {
-                                  absent: "bg-rose-50 text-rose-600",
-                                  late: "bg-amber-50 text-amber-600",
-                                  "late present": "bg-orange-50 text-orange-600",
-                                  "half-day": "bg-blue-50 text-blue-600",
-                                  "missed punch-out": "bg-orange-50 text-orange-600",
-                                  present: "bg-emerald-50 text-emerald-600"
+                                  absent: "bg-rose-50 text-rose-600 border-rose-100",
+                                  late: "bg-amber-50 text-amber-600 border-amber-100",
+                                  "half-day": "bg-blue-50 text-blue-600 border-blue-100",
+                                  "missed punch-out": "bg-orange-50 text-orange-600 border-orange-100",
+                                  present: "bg-emerald-50 text-emerald-600 border-emerald-100"
                                 };
-                                // If it's present but late, we can still use the late style or a combined one
-                                let displayStyle = styleMap[s] || styleMap.present;
-                                if (s === "present" && isLate) displayStyle = styleMap["late present"];
+                                const displayStyle = styleMap[s] || styleMap.present;
 
                                 return (
-                                  <span className={`inline-flex px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest ${displayStyle}`}>
-                                    {s} {isLate && "(Late)"}
+                                  <span className={`inline-flex px-3 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-widest border shadow-sm ${displayStyle}`}>
+                                    {s}
                                   </span>
                                 );
                               })()}
