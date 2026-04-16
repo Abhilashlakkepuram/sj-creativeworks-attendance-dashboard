@@ -1,13 +1,22 @@
 const Leave = require("../models/Leave");
 const User = require("../models/User");
+const LeaveBalance = require("../models/LeaveBalance");
 const { createNotification, notifyAdmins } = require("./notificationController");
+
+// Helper: Calculate days between dates (inclusive)
+const calculateDays = (start, end) => {
+  const s = new Date(start);
+  const e = new Date(end);
+  const diff = Math.abs(e - s);
+  return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
+};
 
 // ─────────────────────────────────────────────
 // 📌 Employee Request Leave
 // ─────────────────────────────────────────────
 const requestLeave = async (req, res) => {
   try {
-    const { startDate, endDate, reason } = req.body;
+    const { startDate, endDate, reason, leaveType = "paid" } = req.body;
 
     if (!startDate || !endDate || !reason) {
       return res.status(400).json({
@@ -35,11 +44,27 @@ const requestLeave = async (req, res) => {
       });
     }
 
+    const requestedDays = calculateDays(startDate, endDate);
+
+    // Fetch/initialize balance
+    let userBalance = await LeaveBalance.findOne({ user: req.user.id });
+    if (!userBalance) {
+      userBalance = await LeaveBalance.create({ user: req.user.id, balance: 2 });
+    }
+
+    if (leaveType === "paid" && requestedDays > userBalance.balance) {
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient leave balance. You requested ${requestedDays} days but only have ${userBalance.balance} days remaining.`,
+      });
+    }
+
     const leave = await Leave.create({
       user: req.user.id,
       startDate,
       endDate,
       reason,
+      leaveType,
       status: "pending",
     });
 
@@ -134,6 +159,17 @@ const approveLeave = async (req, res) => {
       });
     }
 
+    const requestedDays = calculateDays(leave.startDate, leave.endDate);
+
+    // Deduct from balance IF PAID
+    if (leave.leaveType === "paid") {
+      await LeaveBalance.findOneAndUpdate(
+        { user: leave.user._id },
+        { $inc: { balance: -requestedDays } },
+        { new: true, upsert: true }
+      );
+    }
+
     leave.status = "approved";
     await leave.save();
 
@@ -182,6 +218,15 @@ const rejectLeave = async (req, res) => {
       return res.status(400).json({
         message: "Leave already processed",
       });
+    }
+
+    // IF IT WAS APPROVED AND PAID, REFUND THE BALANCE
+    if (leave.status === "approved" && leave.leaveType === "paid") {
+      const days = calculateDays(leave.startDate, leave.endDate);
+      await LeaveBalance.findOneAndUpdate(
+        { user: leave.user._id },
+        { $inc: { balance: days } }
+      );
     }
 
     leave.status = "rejected";
@@ -242,6 +287,15 @@ const deleteLeave = async (req, res) => {
       });
     }
 
+    // IF IT WAS APPROVED AND PAID, REFUND BEFORE DELETING
+    if (leave.status === "approved" && leave.leaveType === "paid") {
+      const days = calculateDays(leave.startDate, leave.endDate);
+      await LeaveBalance.findOneAndUpdate(
+        { user: leave.user._id },
+        { $inc: { balance: days } }
+      );
+    }
+
     await Leave.findByIdAndDelete(req.params.id);
 
     // 🚀 Real-time update
@@ -262,11 +316,80 @@ const deleteLeave = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────
+// 📌 Get My Leave Balance
+// ─────────────────────────────────────────────
+const getLeaveBalance = async (req, res) => {
+  try {
+    let balance = await LeaveBalance.findOne({ user: req.user.id });
+    
+    // Auto-initialize if not found
+    if (!balance) {
+      balance = await LeaveBalance.create({ user: req.user.id, balance: 2 });
+    }
+
+    res.json({
+      success: true,
+      balance: balance.balance,
+      maxLimit: balance.maxLimit,
+      monthlyCredit: balance.monthlyCredit
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ─────────────────────────────────────────────
+// 📌 Admin View Specific User's Leaves
+// ─────────────────────────────────────────────
+const getLeavesByUser = async (req, res) => {
+  try {
+    const leaves = await Leave.find({ user: req.params.id }).sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: leaves,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
+// ─────────────────────────────────────────────
+// 📌 Admin View Specific User's Balance
+// ─────────────────────────────────────────────
+const getLeaveBalanceByAdmin = async (req, res) => {
+  try {
+    let balance = await LeaveBalance.findOne({ user: req.params.id });
+
+    // Auto-initialize if not found
+    if (!balance) {
+      balance = await LeaveBalance.create({ user: req.params.id, balance: 2 });
+    }
+
+    res.json({
+      success: true,
+      balance: balance.balance,
+      maxLimit: balance.maxLimit,
+      monthlyCredit: balance.monthlyCredit
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ─────────────────────────────────────────────
 module.exports = {
   requestLeave,
   getLeaves,
   getMyLeaves,
+  getLeavesByUser,
   approveLeave,
   rejectLeave,
   deleteLeave,
+  getLeaveBalance,
+  getLeaveBalanceByAdmin,
 };

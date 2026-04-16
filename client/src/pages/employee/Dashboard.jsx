@@ -122,8 +122,13 @@ function Dashboard() {
     }
 
     if (status === "Punched In") {
-      const h = Math.floor(elapsedMinutes / 60);
-      const m = elapsedMinutes % 60;
+      let activeMins = elapsedMinutes;
+      // Product-level logic: deduct 1 hour break if worked more than 4 hours (240 mins) to match backend
+      if (activeMins > 240) {
+        activeMins -= 60;
+      }
+      const h = Math.floor(activeMins / 60);
+      const m = activeMins % 60;
       return `${h}h ${m}m`;
     }
 

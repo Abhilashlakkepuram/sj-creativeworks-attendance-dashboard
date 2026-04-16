@@ -31,13 +31,17 @@ const autoCloseMissedPunchOuts = async () => {
         );
 
         if (missed.length > 0) {
-            const targetHour = parseInt(process.env.AUTO_PUNCH_OUT_TARGET_HOUR) || 19;
+            const targetHour = parseInt(process.env.AUTO_PUNCH_OUT_TARGET_HOUR, 10) || 19;
             
             for (let record of missed) {
-                const { effectivePunchOut, minutes, hoursFloat } = calculateWorkingHours(record.punchIn, null);
+                const { effectivePunchOut, minutes } = calculateWorkingHours(record.punchIn, null, {
+                    timeZone: process.env.TIMEZONE,
+                    targetHour
+                });
                 
                 record.punchOut = effectivePunchOut;
                 record.missedPunchOut = true;
+                record.autoPunchOut = true;
                 record.workMinutes = Math.max(0, minutes);
                 record.status = "missed punch-out";
 
@@ -107,8 +111,10 @@ const getUserAttendance = async (req, res) => {
                 allDays.push(recordMap[key]);
             } else {
                 // No record — mark as absent (skip Sundays if your office is closed)
-                // Remove the Sunday check below if your office works on Sundays
-                if (dayOfWeek !== 0) { // 0 = Sunday (optional: add 6 for Saturday too)
+                const dayOfMonth = cursor.getDate();
+                const isSecondOrFourthSat = dayOfWeek === 6 && ((dayOfMonth >= 8 && dayOfMonth <= 14) || (dayOfMonth >= 22 && dayOfMonth <= 28));
+
+                if (dayOfWeek !== 0 && !isSecondOrFourthSat) {
                     allDays.push({
                         _id: `absent-${userId}-${key}`,
                         user: userId,
@@ -438,10 +444,10 @@ const getAllAttendance = async (req, res) => {
                 const isSunday = range.start.getDay() === 0;
                 const isSaturday = range.start.getDay() === 6;
                 const dayOfMonth = range.start.getDate();
-                const isSecondSat = isSaturday && dayOfMonth >= 8 && dayOfMonth <= 14;
+                const isSecondOrFourthSat = isSaturday && ((dayOfMonth >= 8 && dayOfMonth <= 14) || (dayOfMonth >= 22 && dayOfMonth <= 28));
 
                 // Do not generate absent records for holidays/weekends
-                if (isSunday || isSecondSat) continue;
+                if (isSunday || isSecondOrFourthSat) continue;
 
                 const dateKey = range.start.toISOString().split("T")[0];
                 const presentSet = presenceMap[dateKey] || new Set();

@@ -55,8 +55,8 @@ function EmployeeAttendance() {
         if (!inTime || !outTime) return "—";
         const diff = new Date(outTime) - new Date(inTime);
         let minutes = Math.floor(diff / (1000 * 60));
-        // Product-level logic: deduct 1 hour break if they worked more than 5 hours (300 mins)
-        if (minutes > 300) {
+        // Product-level logic: deduct 1 hour break if they worked more than 4 hours (240 mins)
+        if (minutes > 240) {
             minutes -= 60;
         }
         const h = Math.floor(minutes / 60);
