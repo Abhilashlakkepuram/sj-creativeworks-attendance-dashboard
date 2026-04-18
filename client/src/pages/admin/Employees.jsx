@@ -14,7 +14,9 @@ function Employees() {
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("all");
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newEmp, setNewEmp] = useState({ name: "", email: "", password: "", role: "developer" });
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingEmp, setEditingEmp] = useState(null);
+  const [newEmp, setNewEmp] = useState({ name: "", email: "", password: "", role: "developer", joiningDate: new Date().toISOString().split('T')[0] });
   const [actionLoading, setActionLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -61,7 +63,7 @@ function Employees() {
       setActionLoading(true);
       await api.post("/admin/add-employee", newEmp);
       setShowAddModal(false);
-      setNewEmp({ name: "", email: "", password: "", role: "developer" });
+      setNewEmp({ name: "", email: "", password: "", role: "developer", joiningDate: new Date().toISOString().split('T')[0] });
       fetchEmployees();
     } catch (err) {
       alert(err.response?.data?.message || "Failed to add employee");
@@ -259,7 +261,7 @@ function Employees() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-slate-500 text-xs">
-                      {new Date(emp.createdAt).toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric' })}
+                      {new Date(emp.joiningDate || emp.createdAt).toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric' })}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -280,6 +282,24 @@ function Employees() {
                         >
                           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingEmp(emp);
+                            setNewEmp({
+                              name: emp.name,
+                              email: emp.email,
+                              role: emp.role,
+                              joiningDate: new Date(emp.joiningDate || emp.createdAt).toISOString().split('T')[0]
+                            });
+                            setShowEditModal(true);
+                          }}
+                          className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition"
+                          title="Quick Edit"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
                         </button>
                         {/* <button
@@ -395,6 +415,16 @@ function Employees() {
                   {ROLES.slice(1).map(r => <option key={r} value={r} className="capitalize">{r}</option>)}
                 </select>
               </div>
+              <div className="space-y-1">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">Joining Date</label>
+                <input
+                  required
+                  type="date"
+                  value={newEmp.joiningDate}
+                  onChange={(e) => setNewEmp({ ...newEmp, joiningDate: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-primary-50 outline-none transition"
+                />
+              </div>
               <div className="pt-4 flex gap-3">
                 <button
                   type="button"
@@ -409,6 +439,87 @@ function Employees() {
                   className="flex-1 py-3 font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-2xl transition shadow-lg shadow-primary-100 flex items-center justify-center gap-2"
                 >
                   {actionLoading ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Save Employee"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Edit Modal [NEW] */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
+              <div className="flex flex-col">
+                <h3 className="text-xl font-black text-slate-800 tracking-tight leading-tight">Quick Edit</h3>
+                <p className="text-xs text-slate-400 font-medium">{editingEmp?.email}</p>
+              </div>
+              <button onClick={() => setShowEditModal(false)} className="p-2 hover:bg-slate-200 rounded-xl transition text-slate-400">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                try {
+                  setActionLoading(true);
+                  await api.patch(`/admin/update-employee/${editingEmp._id}`, newEmp);
+                  setShowEditModal(false);
+                  fetchEmployees();
+                  alert("Employee updated successfully!");
+                } catch (err) {
+                  alert(err.response?.data?.message || "Failed to update employee");
+                } finally {
+                  setActionLoading(false);
+                }
+              }}
+              className="p-6 space-y-5"
+            >
+              <div className="space-y-1">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">Name</label>
+                <input
+                  required
+                  type="text"
+                  value={newEmp.name}
+                  onChange={(e) => setNewEmp({ ...newEmp, name: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-primary-50 outline-none transition font-bold"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">Role</label>
+                <select
+                  value={newEmp.role}
+                  onChange={(e) => setNewEmp({ ...newEmp, role: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-primary-50 outline-none transition font-bold bg-white"
+                >
+                  {ROLES.slice(1).map(r => <option key={r} value={r} className="capitalize">{r}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">Joining Date</label>
+                <input
+                  required
+                  type="date"
+                  value={newEmp.joiningDate}
+                  onChange={(e) => setNewEmp({ ...newEmp, joiningDate: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-primary-50 outline-none transition font-bold"
+                />
+              </div>
+              <div className="pt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 py-3 font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-2xl transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading}
+                  className="flex-1 py-3 font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-2xl transition shadow-lg flex items-center justify-center gap-2"
+                >
+                  {actionLoading ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Save Changes"}
                 </button>
               </div>
             </form>

@@ -26,7 +26,7 @@ function SubmittedCard({ report }) {
           {" · "}
           Mood: {moodEmoji(report.moodRating)}
         </p>
-        
+
         {report.isLeave && (
           <div className="mt-2 inline-flex items-center gap-1.5 bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
             🌴 On Leave
@@ -34,13 +34,12 @@ function SubmittedCard({ report }) {
         )}
 
         <span
-          className={`mt-3 inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-            report.status === "approved"
+          className={`mt-3 inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${report.status === "approved"
               ? "bg-emerald-100 text-emerald-700"
               : report.status === "flagged"
-              ? "bg-red-100 text-red-700"
-              : "bg-amber-100 text-amber-700"
-          }`}
+                ? "bg-red-100 text-red-700"
+                : "bg-amber-100 text-amber-700"
+            }`}
         >
           {report.status}
         </span>
@@ -132,11 +131,11 @@ export default function DailyReportForm() {
 
     setSubmitting(true);
     try {
-      const res = await api.post("/reports", { 
-        hours: hoursToSubmit, 
-        overallNotes, 
+      const res = await api.post("/reports", {
+        hours: hoursToSubmit,
+        overallNotes,
         moodRating,
-        isLeave 
+        isLeave
       });
       setTodayReport(res.data.report);
     } catch (err) {
@@ -183,7 +182,7 @@ export default function DailyReportForm() {
       )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        
+
         {/* Leave Status */}
         <div className="bg-white border border-slate-100 rounded-2xl shadow-sm p-5 flex items-center justify-between">
           <div className="flex flex-col">
@@ -191,11 +190,11 @@ export default function DailyReportForm() {
             <span className="text-xs text-slate-400">Mark as leave if you are not working or leaving early</span>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
-            <input 
-              type="checkbox" 
+            <input
+              type="checkbox"
               checked={isLeave}
               onChange={(e) => setIsLeave(e.target.checked)}
-              className="sr-only peer" 
+              className="sr-only peer"
             />
             <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
           </label>
@@ -285,11 +284,10 @@ export default function DailyReportForm() {
                 key={m}
                 type="button"
                 onClick={() => setMoodRating(m)}
-                className={`text-3xl transition-transform hover:scale-110 rounded-xl p-2 ${
-                  moodRating === m
+                className={`text-3xl transition-transform hover:scale-110 rounded-xl p-2 ${moodRating === m
                     ? "bg-amber-50 ring-2 ring-amber-400 scale-110"
                     : "opacity-50 hover:opacity-100"
-                }`}
+                  }`}
               >
                 {moodEmoji(m)}
               </button>
@@ -301,11 +299,10 @@ export default function DailyReportForm() {
         <button
           type="submit"
           disabled={submitting}
-          className={`w-full py-4 rounded-2xl text-sm font-black uppercase tracking-wider transition ${
-            !submitting
+          className={`w-full py-4 rounded-2xl text-sm font-black uppercase tracking-wider transition ${!submitting
               ? "bg-teal-600 hover:bg-teal-700 text-white shadow-lg hover:shadow-xl"
               : "bg-slate-200 text-slate-400 cursor-not-allowed"
-          }`}
+            }`}
         >
           {submitting ? "Submitting…" : "Submit Daily Report"}
         </button>

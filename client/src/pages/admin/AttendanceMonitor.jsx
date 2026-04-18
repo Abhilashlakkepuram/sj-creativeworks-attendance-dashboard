@@ -6,12 +6,11 @@ import autoTable from "jspdf-autotable";
 
 const STATUS = ["all", "present", "late", "half-day", "absent", "missed"];
 
-const getLocalISOString = (date) => {
-  const d = new Date(date);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+const getISTYMD = (date) => {
+  // Use Intl to get date parts in Asia/Kolkata
+  const options = { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" };
+  const formatter = new Intl.DateTimeFormat("en-CA", options); 
+  return formatter.format(new Date(date)); // returns YYYY-MM-DD
 };
 
 function AttendanceMonitor() {
@@ -92,7 +91,7 @@ function AttendanceMonitor() {
       const rawDate = record.date || record.punchIn || record.createdAt;
       if (!rawDate) return groups;
 
-      const dateKey = getLocalISOString(rawDate);
+      const dateKey = getISTYMD(rawDate);
 
       if (!groups[dateKey]) {
         groups[dateKey] = [];
@@ -106,11 +105,11 @@ function AttendanceMonitor() {
     if (dateStr === 'Unknown') return 'Unknown Date';
 
     const now = new Date();
-    const today = getLocalISOString(now);
+    const today = getISTYMD(now);
 
     const yestDate = new Date(now);
     yestDate.setDate(yestDate.getDate() - 1);
-    const yesterday = getLocalISOString(yestDate);
+    const yesterday = getISTYMD(yestDate);
 
     if (dateStr === today) return 'Today';
     if (dateStr === yesterday) return 'Yesterday';
@@ -118,7 +117,8 @@ function AttendanceMonitor() {
     return new Date(dateStr).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
-      year: 'numeric'
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata'
     });
   };
 
@@ -143,8 +143,8 @@ function AttendanceMonitor() {
     const tableRows = data.map(item => [
       item.user?.name || "-",
       item.user?.email || "-",
-      item.punchIn ? new Date(item.punchIn).toLocaleTimeString() : "-",
-      item.punchOut ? new Date(item.punchOut).toLocaleTimeString() : "-",
+      item.punchIn ? new Date(item.punchIn).toLocaleTimeString([], { timeZone: 'Asia/Kolkata' }) : "-",
+      item.punchOut ? new Date(item.punchOut).toLocaleTimeString([], { timeZone: 'Asia/Kolkata' }) : "-",
       calculateHours(item.punchIn, item.punchOut),
       item.status.toUpperCase()
     ]);
@@ -157,7 +157,7 @@ function AttendanceMonitor() {
       headStyles: { fillColor: [79, 70, 229] }
     });
 
-    doc.save(`attendance_monitor_${getLocalISOString(new Date())}.pdf`);
+    doc.save(`attendance_monitor_${getISTYMD(new Date())}.pdf`);
   };
 
   const groupedData = groupAttendanceByDate(data);
@@ -247,11 +247,11 @@ function AttendanceMonitor() {
               {/* Date Header (Sticky) */}
               <div
                 onClick={() => toggleDate(dateKey)}
-                className={`sticky top-0 z-10 flex items-center justify-between bg-white/80 backdrop-blur-md py-4 px-2 mb-4 border-b border-slate-100 cursor-pointer transition-all ${dateKey === getLocalISOString(new Date()) ? 'border-l-4 border-l-indigo-600 pl-4' : ''
+                className={`sticky top-0 z-10 flex items-center justify-between bg-white/80 backdrop-blur-md py-4 px-2 mb-4 border-b border-slate-100 cursor-pointer transition-all ${dateKey === getISTYMD(new Date()) ? 'border-l-4 border-l-indigo-600 pl-4' : ''
                   }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${dateKey === getLocalISOString(new Date()) ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-500'
+                  <div className={`p-2 rounded-lg ${dateKey === getISTYMD(new Date()) ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-500'
                     }`}>
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -260,7 +260,7 @@ function AttendanceMonitor() {
                   <div>
                     <h3 className="text-lg font-bold text-slate-900">
                       {formatDateHeader(dateKey)}
-                      {dateKey === getLocalISOString(new Date()) && (
+                      {dateKey === getISTYMD(new Date()) && (
                         <span className="ml-2 text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">Current</span>
                       )}
                     </h3>
@@ -318,10 +318,10 @@ function AttendanceMonitor() {
                               </div>
                             </td>
                             <td className="p-4 text-center font-medium text-slate-600">
-                              {item.punchIn ? new Date(item.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "-"}
+                              {item.punchIn ? new Date(item.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : "-"}
                             </td>
                             <td className="p-4 text-center font-medium text-slate-600">
-                              {item.punchOut ? new Date(item.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "-"}
+                              {item.punchOut ? new Date(item.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : "-"}
                             </td>
                             <td className="p-4 text-center">
                               <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold">

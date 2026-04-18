@@ -219,7 +219,7 @@ function Dashboard() {
             <div className="flex flex-col gap-4">
               <div className="text-sm text-slate-500">
                 {todayAttendance?.punchIn
-                  ? `Punched in at: ${new Date(todayAttendance.punchIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                  ? `Punched in at: ${new Date(todayAttendance.punchIn).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}`
                   : "You haven't punched in yet today."}
               </div>
               <Button
@@ -248,7 +248,7 @@ function Dashboard() {
             <div className="flex flex-col gap-4">
               <div className="text-sm text-slate-500">
                 {todayAttendance?.punchOut
-                  ? `Punched out at: ${new Date(todayAttendance.punchOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                  ? `Punched out at: ${new Date(todayAttendance.punchOut).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}`
                   : "Remember to punch out when leaving."}
               </div>
               <Button
@@ -324,7 +324,7 @@ function Dashboard() {
                     {ann.priority}
                   </span>
                   <span className="text-[10px] text-slate-400 font-bold uppercase">
-                    {new Date(ann.createdAt).toLocaleDateString("en-IN", { day: 'numeric', month: 'short' })}
+                    {new Date(ann.createdAt).toLocaleDateString("en-IN", { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}
                   </span>
                 </div>
                 <h4 className="text-base font-bold text-slate-800 mb-1 group-hover:text-primary-600 transition-colors pl-2">

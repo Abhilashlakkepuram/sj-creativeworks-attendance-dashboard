@@ -1,26 +1,31 @@
 const User = require("../models/User");
 const Attendance = require("../models/Attendance");
+const Holiday = require("../models/Holiday");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const { getPagination, formatPagination } = require("../utils/pagination");
 const { calculateWorkingHours } = require("../utils/attendanceHelpers");
+const {
+    getTodayRange,
+    toUTC,
+    getISTDateParts,
+    getISTYMD,
+    isOfficeHoliday,
+    isPublicHoliday,
+    isBeforeJoining
+} = require("../utils/timeHelper");
 
-// Helper: get start and end of today in LOCAL server time
-const getTodayRangeHelper = () => {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
-    return { start, end };
-};
+
+// (Replacing getTodayRangeHelper with standardized version from timeHelper)
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 const autoCloseMissedPunchOuts = async () => {
     try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const todayRange = getTodayRange();
+        const today = todayRange.start;
 
-        // Find all records from before today that have punchIn but no punchOut
+        // Find all records from before today (IST) that have punchIn but no punchOut
         const missed = await Attendance.find(
             {
                 date: { $lt: today },
@@ -35,7 +40,6 @@ const autoCloseMissedPunchOuts = async () => {
 
             for (let record of missed) {
                 const { effectivePunchOut, minutes } = calculateWorkingHours(record.punchIn, null, {
-                    timeZone: process.env.TIMEZONE,
                     targetHour
                 });
 
@@ -47,7 +51,7 @@ const autoCloseMissedPunchOuts = async () => {
 
                 await record.save();
             }
-            console.log(`🕐 Auto-closed ${missed.length} missed punch-outs at ${targetHour}:00 target.`);
+            console.log(`🕐 Auto-closed ${missed.length} missed punch-outs (IST safe).`);
         }
     } catch (err) {
         console.error("❌ autoCloseMissedPunchOuts error:", err.message);
@@ -68,34 +72,36 @@ const getUserAttendance = async (req, res) => {
         await autoCloseMissedPunchOuts();
 
         // Fetch employee info
-        const employee = await User.findById(userId).select("name email createdAt").lean();
+        const employee = await User.findById(userId).select("name email createdAt joiningDate").lean();
         if (!employee) {
             return res.status(404).json({ message: "Employee not found" });
         }
 
-        // Determine default bounds
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Standardized today range
+        const todayRange = getTodayRange();
+        const today = todayRange.start;
 
-        const joinDate = new Date(employee.createdAt);
-        joinDate.setHours(0, 0, 0, 0);
-
-        // Define actual range to iterate
-        let rangeStart = joinDate;
-        let rangeEnd = today;
+        // Define bounds for month or overall
+        let rangeStart, rangeEnd;
 
         if (month) {
             const [year, m] = month.split("-").map(Number);
-            const monthStart = new Date(year, m - 1, 1);
-            const monthEnd = new Date(year, m, 0);
+            rangeStart = toUTC(year, m, 1, 0, 0, 0);
+            const lastDay = new Date(year, m, 0).getDate();
+            rangeEnd = toUTC(year, m, lastDay, 0, 0, 0);
 
-            // Constraints: No dates before join, no dates in future
-            rangeStart = new Date(Math.max(joinDate, monthStart));
-            rangeEnd = new Date(Math.min(today, monthEnd));
+            if (rangeEnd > today) rangeEnd = today;
+        } else {
+            // Default: 30 days ago to today
+            rangeEnd = today;
+            rangeStart = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+            // But don't go before join date
+            const joinDate = new Date(employee.joiningDate || employee.createdAt);
+            const joinParts = getISTDateParts(joinDate);
+            const joinStart = toUTC(joinParts.year, joinParts.month, joinParts.day, 0, 0, 0);
+            if (rangeStart < joinStart) rangeStart = joinStart;
         }
-
-        rangeStart.setHours(0, 0, 0, 0);
-        rangeEnd.setHours(23, 59, 59, 999);
 
         // Fetch records for this specific range
         const existingRecords = await Attendance.find({
@@ -105,31 +111,35 @@ const getUserAttendance = async (req, res) => {
             .sort({ date: -1 })
             .lean();
 
-        // Build a map of date → record for quick lookup
+        // [NEW] Fetch holidays for this range
+        const holidays = await Holiday.find({
+            date: { $gte: rangeStart, $lte: rangeEnd }
+        }).lean();
+        const holidayYMDs = holidays.map(h => getISTYMD(h.date));
+
+        // Build a map of date → record for quick lookup using YMD strings
         const recordMap = {};
         existingRecords.forEach(r => {
-            const key = new Date(r.date).toISOString().split("T")[0];
+            const key = getISTYMD(r.date);
             recordMap[key] = r;
         });
 
         // Build complete day-by-day list
         const allDays = [];
-        rangeEnd.setHours(0, 0, 0, 0); // Reset for loop
-        const cursor = new Date(rangeEnd);
+        let cursor = new Date(rangeEnd);
 
         while (cursor >= rangeStart) {
-            const key = cursor.toISOString().split("T")[0];
-            const dayOfWeek = cursor.getDay(); // 0 = Sunday, 6 = Saturday
+            const key = getISTYMD(cursor);
 
             if (recordMap[key]) {
-                // Real record exists — use it
                 allDays.push(recordMap[key]);
             } else {
-                // No record — mark as absent (skip Sundays if your office is closed)
-                const dayOfMonth = cursor.getDate();
-                const isSecondOrFourthSat = dayOfWeek === 6 && ((dayOfMonth >= 8 && dayOfMonth <= 14) || (dayOfMonth >= 22 && dayOfMonth <= 28));
+                // No record — mark as absent (skip weekends/holidays and pre-joining)
+                const isOfficeOff = isOfficeHoliday(cursor);
+                const isPubHoliday = isPublicHoliday(cursor, holidayYMDs);
+                const isBeforeStart = isBeforeJoining(employee, cursor);
 
-                if (dayOfWeek !== 0 && !isSecondOrFourthSat) {
+                if (!isOfficeOff && !isPubHoliday && !isBeforeStart) {
                     allDays.push({
                         _id: `absent-${userId}-${key}`,
                         user: userId,
@@ -145,8 +155,13 @@ const getUserAttendance = async (req, res) => {
                 }
             }
 
-            cursor.setDate(cursor.getDate() - 1);
+            // Move back by exactly 24 hours
+            cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
+            // Re-normalize to midnight to avoid drift (though not expected in IST)
+            const prevParts = getISTDateParts(cursor);
+            cursor = toUTC(prevParts.year, prevParts.month, prevParts.day, 0, 0, 0);
         }
+
 
         // Add derived field workType
         const enhancedDays = allDays.map(d => {
@@ -242,8 +257,9 @@ const getEmployees = async (req, res) => {
                                     input: "$attendance",
                                     as: "a",
                                     cond: {
-                                        $gte: ["$$a.date", getTodayRangeHelper().start]
+                                        $gte: ["$$a.date", getTodayRange().start]
                                     }
+
                                 }
                             },
                             0
@@ -284,11 +300,18 @@ const getEmployees = async (req, res) => {
 
 const addEmployee = async (req, res) => {
     try {
-        const { name, email, password, role } = req.body;
+        const { name, email, password, role, joiningDate } = req.body;
         const existingUser = await User.findOne({ email });
         if (existingUser) return res.status(400).json({ message: "User already exists" });
         const hashedPassword = await bcrypt.hash(password, 10);
-        const user = new User({ name, email, password: hashedPassword, role, isApproved: true });
+        const user = new User({
+            name,
+            email,
+            password: hashedPassword,
+            role,
+            joiningDate: joiningDate || new Date(),
+            isApproved: true
+        });
         await user.save();
         req.app.get("io").emit("dashboard-update");
         res.status(201).json({ message: "Employee added successfully" });
@@ -299,8 +322,8 @@ const addEmployee = async (req, res) => {
 
 const updateEmployee = async (req, res) => {
     try {
-        const { name, email, role } = req.body;
-        await User.findByIdAndUpdate(req.params.id, { name, email, role });
+        const { name, email, role, joiningDate } = req.body;
+        await User.findByIdAndUpdate(req.params.id, { name, email, role, joiningDate });
         req.app.get("io").emit("dashboard-update");
         res.json({ message: "Employee updated successfully" });
     } catch (error) {
@@ -388,11 +411,12 @@ const getAllAttendance = async (req, res) => {
         await autoCloseMissedPunchOuts();
 
         if (date) {
-            const selectedDate = new Date(date);
-            const start = new Date(selectedDate.setHours(0, 0, 0, 0));
-            const end = new Date(selectedDate.setHours(23, 59, 59, 999));
+            const [y, m, d] = date.split("-").map(Number);
+            const start = toUTC(y, m, d, 0, 0, 0);
+            const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
             filter.date = { $gte: start, $lte: end };
         }
+
 
         let userFilter = {};
         if (search) {
@@ -409,33 +433,25 @@ const getAllAttendance = async (req, res) => {
         // If status is "all" or undefined, we don't strict filter by status
 
         let datesToCheck = [];
+        const todayRange = getTodayRange();
+        const todayAtMidnight = todayRange.start;
+
         if (date) {
-            const d = new Date(date);
-            datesToCheck.push({
-                start: new Date(d.setHours(0, 0, 0, 0)),
-                end: new Date(d.setHours(23, 59, 59, 999))
-            });
+            const [y, m, d] = date.split("-").map(Number);
+            const start = toUTC(y, m, d, 0, 0, 0);
+            const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
+            datesToCheck.push({ start, end });
         } else {
-            const firstRecord = await Attendance.findOne().sort({ date: 1 });
-            const startDate = firstRecord
-                ? new Date(firstRecord.date)
-                : new Date(new Date().setDate(new Date().getDate() - 30));
-
-            const today = new Date();
-            let current = new Date(today);
-            current.setHours(0, 0, 0, 0);
-
-            const limitDate = new Date(startDate);
-            limitDate.setHours(0, 0, 0, 0);
-
-            while (current >= limitDate) {
-                datesToCheck.push({
-                    start: new Date(current),
-                    end: new Date(new Date(current).setHours(23, 59, 59, 999))
-                });
-                current.setDate(current.getDate() - 1);
+            // Default: last 30 days
+            let cursor = todayAtMidnight;
+            for (let i = 0; i < 30; i++) {
+                const start = new Date(cursor);
+                const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
+                datesToCheck.push({ start, end });
+                cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
             }
         }
+
 
         const rangeStart = datesToCheck[datesToCheck.length - 1].start;
         const rangeEnd = datesToCheck[0].end;
@@ -445,6 +461,12 @@ const getAllAttendance = async (req, res) => {
             date: { $gte: rangeStart, $lte: rangeEnd },
             ...filter
         }).populate({ path: "user", match: userFilter, select: "name email role" }).lean();
+
+        // [NEW] Fetch holidays for this range
+        const holidays = await Holiday.find({
+            date: { $gte: rangeStart, $lte: rangeEnd }
+        }).lean();
+        const holidayYMDs = holidays.map(h => getISTYMD(h.date));
 
         let allRecords = existingAttendances.filter(a => a.user !== null); // Remove if user didn't match search filter
 
@@ -463,30 +485,24 @@ const getAllAttendance = async (req, res) => {
 
             const presenceMap = {};
             allRangeAttendances.forEach(a => {
-                const dateKey = a.date.toISOString().split("T")[0];
+                const dateKey = getISTYMD(a.date);
                 if (!presenceMap[dateKey]) presenceMap[dateKey] = new Set();
                 presenceMap[dateKey].add(a.user.toString());
             });
 
             let absentRecords = [];
             for (const range of datesToCheck) {
-                const isSunday = range.start.getDay() === 0;
-                const isSaturday = range.start.getDay() === 6;
-                const dayOfMonth = range.start.getDate();
-                const isSecondOrFourthSat = isSaturday && ((dayOfMonth >= 8 && dayOfMonth <= 14) || (dayOfMonth >= 22 && dayOfMonth <= 28));
+                const isOfficeOff = isOfficeHoliday(range.start);
+                const isPubHoliday = isPublicHoliday(range.start, holidayYMDs);
+                if (isOfficeOff || isPubHoliday) continue;
 
-                // Do not generate absent records for holidays/weekends
-                if (isSunday || isSecondOrFourthSat) continue;
-
-                const dateKey = range.start.toISOString().split("T")[0];
+                const dateKey = getISTYMD(range.start);
                 const presentSet = presenceMap[dateKey] || new Set();
 
                 const validCandidates = candidates.filter(u => {
-                    if (!u.createdAt) return false;
-                    const cDate = new Date(u.createdAt);
-                    cDate.setHours(0, 0, 0, 0);
-                    return cDate <= range.start;
+                    return !isBeforeJoining(u, range.start);
                 });
+
 
                 const absentForThisDay = validCandidates.filter(u => !presentSet.has(u._id.toString()));
 
@@ -527,11 +543,11 @@ const getAllAttendance = async (req, res) => {
 const getDashboardStats = async (req, res) => {
     try {
         const totalEmployees = await User.countDocuments({ role: { $ne: "admin" } });
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const today = getTodayRange().start;
         const todayAttendance = await Attendance.countDocuments({ date: today });
         const lateEmployees = await Attendance.countDocuments({ date: today, isLate: true });
         res.json({ totalEmployees, todayAttendance, lateEmployees });
+
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }

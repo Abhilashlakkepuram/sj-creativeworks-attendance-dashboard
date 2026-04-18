@@ -367,11 +367,28 @@ function Chat() {
                       <div className="flex flex-col items-end gap-1">
                         {/* Time */}
                         {chat.time && (
-                          <span className="text-[10px] text-slate-400">
-                            {new Date(chat.time).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                          <span className="text-[10px] text-slate-400 text-right whitespace-nowrap">
+                            {(() => {
+                              const d = new Date(chat.time);
+                              const today = new Date();
+                              const isToday = d.getDate() === today.getDate() && 
+                                             d.getMonth() === today.getMonth() && 
+                                             d.getFullYear() === today.getFullYear();
+                              
+                              if (isToday) {
+                                return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                              }
+
+                              const yesterday = new Date();
+                              yesterday.setDate(yesterday.getDate() - 1);
+                              const isYesterday = d.getDate() === yesterday.getDate() && 
+                                                 d.getMonth() === yesterday.getMonth() && 
+                                                 d.getFullYear() === yesterday.getFullYear();
+
+                              if (isYesterday) return "Yesterday";
+                              
+                              return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+                            })()}
                           </span>
                         )}
 
@@ -438,67 +455,105 @@ function Chat() {
                   </p>
                 </div>
               ) : (
-                messages.map((m, i) => {
-                  const mSenderId = m.sender?._id || m.sender;
-                  const isMe = mSenderId === user.id;
-                  const isImage = m.fileType?.startsWith("image/");
+                (() => {
+                  let lastDateLabel = null;
                   
-                  return (
-                    <div key={i} className={`flex ${isMe ? "justify-end" : "justify-start"} animate-fade-in-up`}>
-                      <div className={`max-w-[75%] px-4 py-2.5 shadow-sm text-sm ${isMe
-                        ? "bg-primary-600 text-white rounded-2xl rounded-tr-sm"
-                        : "bg-white text-slate-800 border border-slate-200 rounded-2xl rounded-tl-sm"
-                        }`}>
-                        {user.role === "admin" && selectedRole && !isMe && (
-                          <div className="text-[10px] font-bold text-primary-500 mb-1">Employe Msg</div>
+                  return messages.map((m, i) => {
+                    const mSenderId = m.sender?._id || m.sender;
+                    const isMe = mSenderId === user.id;
+                    const isImage = m.fileType?.startsWith("image/");
+                    
+                    // --- Date Grouping Logic ---
+                    const messageDate = new Date(m.createdAt);
+                    const today = new Date();
+                    
+                    const mSnap = new Date(messageDate.getFullYear(), messageDate.getMonth(), messageDate.getDate());
+                    const tSnap = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                    
+                    const diffDays = Math.round((tSnap - mSnap) / (1000 * 60 * 60 * 24));
+                    
+                    let currentDateLabel = "";
+                    if (diffDays === 0) currentDateLabel = "Today";
+                    else if (diffDays === 1) currentDateLabel = "Yesterday";
+                    else if (diffDays < 7) currentDateLabel = messageDate.toLocaleDateString(undefined, { weekday: 'long' });
+                    else currentDateLabel = messageDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+
+                    const showDivider = currentDateLabel !== lastDateLabel;
+                    lastDateLabel = currentDateLabel;
+
+                    return (
+                      <div key={i} className="flex flex-col gap-4">
+                        {showDivider && (
+                          <div className="flex items-center justify-center my-4">
+                            <div className="h-[1px] bg-slate-200 flex-1"></div>
+                            <span className="px-4 py-1.5 bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-full border border-slate-200 shadow-sm mx-4">
+                              {currentDateLabel}
+                            </span>
+                            <div className="h-[1px] bg-slate-200 flex-1"></div>
+                          </div>
                         )}
-                        
-                        {/* File Display */}
-                        {m.fileUrl && (
-                          <div className="mb-2">
-                            {isImage ? (
-                              <img 
-                                src={`${API_URL}${m.fileUrl}`} 
-                                alt="Shared media" 
-                                className="max-w-full rounded-lg border border-white/20 shadow-sm transition-transform hover:scale-[1.02] cursor-pointer"
-                                onClick={() => window.open(`${API_URL}${m.fileUrl}`, '_blank')}
-                              />
-                            ) : (
-                              <a 
-                                href={`${API_URL}${m.fileUrl}`} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className={`flex items-center gap-3 p-3 rounded-xl border ${isMe ? 'bg-primary-700/50 border-primary-500 text-white' : 'bg-slate-50 border-slate-200 text-slate-700'} hover:bg-opacity-80 transition-all`}
-                              >
-                                <div className={`w-10 h-10 rounded-lg ${isMe ? 'bg-primary-500' : 'bg-white'} flex items-center justify-center shadow-sm`}>
-                                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-bold truncate">{m.fileName || "Download Document"}</p>
-                                  <p className="text-[10px] opacity-60 uppercase tracking-tighter">Click to download</p>
-                                </div>
-                              </a>
+
+                        <div className={`flex ${isMe ? "justify-end" : "justify-start"} animate-fade-in-up`}>
+                          <div className={`max-w-[75%] px-4 py-2.5 shadow-sm text-sm ${isMe
+                            ? "bg-primary-600 text-white rounded-2xl rounded-tr-sm"
+                            : "bg-white text-slate-800 border border-slate-200 rounded-2xl rounded-tl-sm"
+                            }`}>
+                            {user.role === "admin" && selectedRole && !isMe && (
+                              <div className="text-[10px] font-bold text-primary-500 mb-1">Employe Msg</div>
                             )}
-                          </div>
-                        )}
+                            
+                            {/* File Display */}
+                            {m.fileUrl && (
+                              <div className="mb-2">
+                                {isImage ? (
+                                  <img 
+                                    src={`${API_URL}${m.fileUrl}`} 
+                                    alt="Shared media" 
+                                    className="max-w-full rounded-lg border border-white/20 shadow-sm transition-transform hover:scale-[1.02] cursor-pointer"
+                                    onClick={() => window.open(`${API_URL}${m.fileUrl}`, '_blank')}
+                                  />
+                                ) : (
+                                  <a 
+                                    href={`${API_URL}${m.fileUrl}`} 
+                                    target="_blank" 
+                                    rel="noreferrer"
+                                    className={`flex items-center gap-3 p-3 rounded-xl border ${isMe ? 'bg-primary-700/50 border-primary-500 text-white' : 'bg-slate-50 border-slate-200 text-slate-700'} hover:bg-opacity-80 transition-all`}
+                                  >
+                                    <div className={`w-10 h-10 rounded-lg ${isMe ? 'bg-primary-500' : 'bg-white'} flex items-center justify-center shadow-sm`}>
+                                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                      </svg>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-bold truncate">{m.fileName || "Download Document"}</p>
+                                      <p className="text-[10px] opacity-60 uppercase tracking-tighter">Click to download</p>
+                                    </div>
+                                  </a>
+                                )}
+                              </div>
+                            )}
 
-                        {m.message && <div className="leading-relaxed">{m.message}</div>}
+                            {m.message && <div className="leading-relaxed">{m.message}</div>}
 
-                        {/* Seen Status Ticks */}
-                        {isMe && !selectedRole && (
-                          <div className={`flex justify-end mt-0.5 -mr-1`}>
-                             <span className={`text-[10px] font-bold ${m.isSeen ? 'text-blue-200' : 'text-slate-300'}`}>
-                               {m.isSeen ? "✓✓" : "✓"}
-                             </span>
+                            {/* Footer (Time + Ticks) */}
+                            <div className="flex items-center justify-end gap-1.5 mt-1 opacity-70">
+                              <span className="text-[9px] font-medium">
+                                {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                              {isMe && !selectedRole && (
+                                <span className={`text-[10px] font-bold ${m.isSeen ? 'text-blue-200' : 'text-slate-300'}`}>
+                                  {m.isSeen ? "✓✓" : "✓"}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })
+                    );
+                  });
+                })()
               )}
+
               <div ref={messagesEndRef} />
             </div>
 

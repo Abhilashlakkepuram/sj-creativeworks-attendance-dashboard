@@ -1,79 +1,23 @@
-// controllers/attendanceController.js
 const Attendance = require("../models/Attendance");
+const Holiday = require("../models/Holiday");
+const User = require("../models/User");
 const { notifyAdmins } = require("./notificationController");
 const { getDistance } = require("../utils/locationCheck.js");
-const { calculateWorkingHours, getAutoPunchOutTime } = require("../utils/attendanceHelpers");
+const { calculateWorkingHours } = require("../utils/attendanceHelpers");
 
-const TIMEZONE = process.env.TIMEZONE || "Asia/Kolkata";
+const {
+    getNowIST,
+    toUTC,
+    getISTDateParts,
+    getISTYMD,
+    getTodayRange,
+    isOfficeHoliday,
+    isPublicHoliday,
+    isBeforeJoining,
+    TIMEZONE
+} = require("../utils/timeHelper");
+
 const AUTO_PUNCH_OUT_HOUR = parseInt(process.env.AUTO_PUNCH_OUT_TARGET_HOUR, 10) || 19;
-
-// ─── Timezone helpers ────────────────────────────────────────────────────────
-
-// Returns the current wall-clock time in IST as a true UTC-based Date
-const getNowIST = () => {
-    // We want the actual current instant, not a fake local date
-    return new Date();
-};
-
-// Returns start (00:00:00) and end (23:59:59) of today in IST as UTC-based Dates
-const getTodayRange = () => {
-    const now = new Date();
-
-    // Get IST date parts without any setHours tricks
-    const formatter = new Intl.DateTimeFormat("en-US", {
-        timeZone: TIMEZONE,
-        year: "numeric", month: "2-digit", day: "2-digit"
-    });
-    const parts = formatter.formatToParts(now).reduce((acc, p) => {
-        if (p.type !== "literal") acc[p.type] = Number(p.value);
-        return acc;
-    }, {});
-
-    // Build IST midnight and end-of-day as real UTC instants
-    const start = toUTC(parts.year, parts.month, parts.day, 0, 0, 0);
-    const end = toUTC(parts.year, parts.month, parts.day, 23, 59, 59);
-    return { start, end };
-};
-
-// Converts a wall-clock IST date/time to its UTC equivalent
-const toUTC = (year, month, day, hour, minute, second) => {
-    // Probe the IST offset for this instant
-    const probe = Date.UTC(year, month - 1, day, hour, minute, second);
-    const probeDate = new Date(probe);
-
-    const fmt = new Intl.DateTimeFormat("en-US", {
-        timeZone: TIMEZONE,
-        year: "numeric", month: "2-digit", day: "2-digit",
-        hour: "2-digit", minute: "2-digit", second: "2-digit",
-        hour12: false
-    });
-    const p = fmt.formatToParts(probeDate).reduce((acc, part) => {
-        if (part.type !== "literal") acc[part.type] = Number(part.value);
-        return acc;
-    }, {});
-
-    const probeAsUTC = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
-    const offsetMs = probeAsUTC - probeDate.getTime();
-    return new Date(probe - offsetMs);
-};
-
-// Gets date parts (year, month, day) in IST for any UTC Date
-const getISTDateParts = (date) => {
-    const fmt = new Intl.DateTimeFormat("en-US", {
-        timeZone: TIMEZONE,
-        year: "numeric", month: "2-digit", day: "2-digit"
-    });
-    return fmt.formatToParts(date).reduce((acc, p) => {
-        if (p.type !== "literal") acc[p.type] = Number(p.value);
-        return acc;
-    }, {});
-};
-
-// Returns YYYY-MM-DD string for a date in IST (for dedup set)
-const getISTYMD = (date) => {
-    const p = getISTDateParts(date);
-    return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
-};
 
 // ─── Punch In ────────────────────────────────────────────────────────────────
 const punchIn = async (req, res) => {
@@ -107,26 +51,20 @@ const punchIn = async (req, res) => {
             return res.status(400).json({ message: "You already punched in today" });
         }
 
-        const now = getNowIST(); // real UTC instant — no toLocaleString tricks
+        const now = getNowIST();
 
-        // ✅ Check late punch-in against IST wall clock — get IST hours/minutes cleanly
-        const istTimeParts = new Intl.DateTimeFormat("en-US", {
-            timeZone: TIMEZONE,
-            hour: "2-digit", minute: "2-digit", hour12: false
-        }).formatToParts(now).reduce((acc, p) => {
-            if (p.type !== "literal") acc[p.type] = Number(p.value);
-            return acc;
-        }, {});
+        // ✅ Check late punch-in against IST wall clock (9:15 AM Threshold)
+        const istTimeParts = getISTDateParts(now);
 
         const isLate =
-            istTimeParts.hour > 10 ||
-            (istTimeParts.hour === 10 && istTimeParts.minute > 15);
+            istTimeParts.hour > 9 ||
+            (istTimeParts.hour === 9 && istTimeParts.minute > 15);
 
         const attendance = new Attendance({
             user: userId,
             date: start,
             punchIn: now,
-            status: isLate ? "late" : "present", // ✅ FIX
+            status: isLate ? "late" : "present",
             isLate
         });
 
@@ -188,22 +126,23 @@ const punchOut = async (req, res) => {
         }
 
         const now = getNowIST();
-        attendance.punchOut = now;
 
         // ✅ Pass timezone and cap options — consistent with cron
-        const { minutes, hoursFloat } = calculateWorkingHours(
+        const { minutes, hoursFloat, effectivePunchOut } = calculateWorkingHours(
             attendance.punchIn,
             now,
             { timeZone: TIMEZONE, targetHour: AUTO_PUNCH_OUT_HOUR }
         );
 
+        attendance.punchOut = effectivePunchOut;
         attendance.workMinutes = Math.max(0, minutes);
         attendance.missedPunchOut = false;
         attendance.autoPunchOut = false;
 
-        if (hoursFloat >= 8) {
+        // ✅ Standardized status thresholds: 5h (Present), 2.5h (Half-Day)
+        if (hoursFloat >= 5) {
             attendance.status = attendance.isLate ? "late" : "present";
-        } else if (hoursFloat >= 4) {
+        } else if (hoursFloat >= 2.5) {
             attendance.status = "half-day";
         } else {
             attendance.status = "absent";
@@ -258,8 +197,14 @@ const getMyAttendance = async (req, res) => {
         const user = await User.findById(userId);
 
         if (user?.createdAt) {
-            // ✅ Start from the user's join date at IST midnight
-            const joinParts = getISTDateParts(new Date(user.createdAt));
+            // ✅ Safety Limit: Only backfill up to 30 days
+            const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+            // Start from joint date at IST midnight, but no earlier than 30 days ago
+            const joinDate = new Date(user.createdAt);
+            const effectiveStart = joinDate < thirtyDaysAgo ? thirtyDaysAgo : joinDate;
+
+            const joinParts = getISTDateParts(effectiveStart);
             let cursor = toUTC(joinParts.year, joinParts.month, joinParts.day, 0, 0, 0);
 
             const existingRecords = await Attendance.find({
@@ -267,42 +212,40 @@ const getMyAttendance = async (req, res) => {
                 date: { $gte: cursor, $lt: today }
             });
 
-            // ✅ Build dedup set using IST date strings, not server local time
+            // ✅ Build dedup set using IST date strings
             const existingDateSet = new Set(existingRecords.map(r => getISTYMD(r.date)));
+
+            // [NEW] Fetch holidays for this range
+            const holidays = await Holiday.find({
+                date: { $gte: rangeStart, $lte: today }
+            }).lean();
+            const holidayYMDs = holidays.map(h => getISTYMD(h.date));
 
             const absentRecordsToCreate = [];
 
             while (cursor < today) {
-                const parts = getISTDateParts(cursor);
-                const jsDay = cursor.getUTCDay(); // 0=Sun, 6=Sat — use UTC day on the IST-midnight instant
-                // Recompute from IST parts to avoid any UTC-day mismatch
-                const istMidnight = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0));
-                const dayOfWeek = new Date(
-                    `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}T00:00:00`
-                ).getDay(); // local parse gives correct day-of-week for the date string
+                const isOfficeOff = isOfficeHoliday(cursor);
+                const isPubHoliday = isPublicHoliday(cursor, holidayYMDs);
+                const isBeforeStart = isBeforeJoining(user, cursor);
+                const ymd = getISTYMD(cursor);
 
-                const isSunday = dayOfWeek === 0;
-                const isSaturday = dayOfWeek === 6;
-                const isSecondSat = isSaturday && parts.day >= 8 && parts.day <= 14;
-
-                const ymd = `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
-
-                if (!isSunday && !isSecondSat && !existingDateSet.has(ymd)) {
+                if (!isOfficeOff && !isPubHoliday && !isBeforeStart && !existingDateSet.has(ymd)) {
                     absentRecordsToCreate.push({
                         user: userId,
-                        date: cursor,   // ✅ proper UTC instant for IST midnight
+                        date: new Date(cursor), // Snap exact instance
                         status: "absent",
                         workMinutes: 0
                     });
                 }
 
-                // Advance by one IST day — add 24h then snap to IST midnight to handle DST safely
-                cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
-                const nextParts = getISTDateParts(cursor);
+                // Advance by exactly 24 hours IST midnight
+                const nextDay = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+                const nextParts = getISTDateParts(nextDay);
                 cursor = toUTC(nextParts.year, nextParts.month, nextParts.day, 0, 0, 0);
             }
 
             if (absentRecordsToCreate.length > 0) {
+                console.log(`[ATTENDANCE] Generating ${absentRecordsToCreate.length} absent records for user: ${user.name}`);
                 const bulkOps = absentRecordsToCreate.map(record => ({
                     updateOne: {
                         filter: { user: record.user, date: record.date },
@@ -313,6 +256,7 @@ const getMyAttendance = async (req, res) => {
                 await Attendance.bulkWrite(bulkOps);
             }
         }
+
 
         // 3. Return updated attendance
         const attendance = await Attendance.find({ user: userId })

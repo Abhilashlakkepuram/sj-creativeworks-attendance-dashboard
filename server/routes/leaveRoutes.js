@@ -12,6 +12,7 @@ const {
     getLeaveBalance,
     getLeavesByUser,
     getLeaveBalanceByAdmin,
+    getEmployeeList,
 } = require("../controllers/leaveController");
 
 const verifyToken = require("../middleware/authMiddleware");
@@ -21,6 +22,7 @@ const isAdmin = require("../middleware/adminMiddleware");
 router.post("/request", verifyToken, requestLeave);
 router.get("/my-leaves", verifyToken, getMyLeaves);
 router.get("/balance", verifyToken, getLeaveBalance);
+router.get("/employees", verifyToken, getEmployeeList); // ✅ token-only: for on-behalf dropdown
 
 router.get("/all", verifyToken, isAdmin, getLeaves);
 router.get("/user/:id", verifyToken, isAdmin, getLeavesByUser);

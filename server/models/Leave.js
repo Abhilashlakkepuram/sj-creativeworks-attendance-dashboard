@@ -6,13 +6,30 @@ const leaveSchema = new mongoose.Schema({
     ref: "User",
     required: true
   },
+  // ── Legacy fields (kept for backward compatibility) ──
   startDate: {
     type: Date,
-    required: true
+    required: false
   },
   endDate: {
     type: Date,
-    required: true
+    required: false
+  },
+  // ── New: multi-date selection ──
+  selectedDates: {
+    type: [Date],
+    default: []
+  },
+  // ── New: on-behalf support ──
+  appliedFor: {
+    type: String,
+    enum: ["self", "other"],
+    default: "self"
+  },
+  requestedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    default: null
   },
   reason: {
     type: String,

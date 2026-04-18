@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "../../services/api";
+import { calculateLeaveDays, formatLeaveDate } from "../../utils/leaveDate";
 
 
 
@@ -12,6 +13,9 @@ function EmployeeProfile() {
   const [leaves, setLeaves] = useState([]);
   const [leaveBalance, setLeaveBalance] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", email: "", role: "", joiningDate: "" });
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -26,6 +30,12 @@ function EmployeeProfile() {
         ]);
 
         setEmployee(profileRes.data);
+        setEditForm({
+          name: profileRes.data.name,
+          email: profileRes.data.email,
+          role: profileRes.data.role,
+          joiningDate: new Date(profileRes.data.joiningDate || profileRes.data.createdAt).toISOString().split('T')[0]
+        });
         setAttendance(attendanceRes.data.data || attendanceRes.data);
         setLeaves(leavesRes.data.data || []);
         setLeaveBalance(balanceRes.data);
@@ -56,15 +66,9 @@ function EmployeeProfile() {
     };
   }, [attendance]);
 
-  // Leave stats calculation
-  const calculateDays = (start, end) => {
-    const diff = new Date(end) - new Date(start);
-    return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
-  };
-
   const leaveStats = useMemo(() => {
     const approvedPaidLeaves = leaves.filter(l => l.status === "approved" && l.leaveType === "paid");
-    const used = approvedPaidLeaves.reduce((sum, l) => sum + calculateDays(l.startDate, l.endDate), 0);
+    const used = approvedPaidLeaves.reduce((sum, l) => sum + calculateLeaveDays(l.startDate, l.endDate), 0);
     const pending = leaves.filter(l => l.status === "pending").length;
 
     return {
@@ -85,9 +89,9 @@ function EmployeeProfile() {
     const currentMonthLeaves = leaves.filter(l => {
       const d = new Date(l.startDate);
       return l.status === "approved" && l.leaveType === "paid" &&
-        d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        d.getUTCMonth() === now.getMonth() && d.getUTCFullYear() === now.getFullYear();
     });
-    const monthlyUsed = currentMonthLeaves.reduce((sum, l) => sum + calculateDays(l.startDate, l.endDate), 0);
+    const monthlyUsed = currentMonthLeaves.reduce((sum, l) => sum + calculateLeaveDays(l.startDate, l.endDate), 0);
     const leavePenalty = monthlyUsed * 2;
 
     // 3. Final Score
@@ -123,6 +127,22 @@ function EmployeeProfile() {
     return `${h}h ${m}m`;
   };
 
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    try {
+      setUpdating(true);
+      await api.patch(`/admin/update-employee/${id}`, editForm);
+      const res = await api.get(`/admin/employee/${id}`);
+      setEmployee(res.data);
+      setIsEditing(false);
+      alert("Profile updated successfully!");
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to update profile");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
 
 
   if (loading) return (
@@ -142,17 +162,33 @@ function EmployeeProfile() {
     <div className="flex flex-col gap-8 max-w-7xl mx-auto pb-20 px-4">
 
       {/* Header & Back Action */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <button
           onClick={() => navigate("/admin/employees")}
-          className="flex items-center gap-2 text-slate-500 hover:text-primary-600 font-bold text-sm transition group"
+          className="flex items-center gap-2 text-slate-500 hover:text-primary-600 font-bold transition text-sm"
         >
-          <div className="w-8 h-8 rounded-full bg-white shadow-sm border border-slate-100 flex items-center justify-center group-hover:bg-primary-50 group-hover:border-primary-100 transition-all">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
-          </div>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
           Back to Directory
         </button>
-      </div>
+
+        <button
+          onClick={() => setIsEditing(!isEditing)}
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-2xl font-bold transition shadow-lg ${isEditing ? "bg-slate-100 text-slate-600 shadow-none hover:bg-slate-200" : "bg-primary-600 text-white shadow-primary-100 hover:bg-primary-700"
+            }`}
+        >
+          {isEditing ? (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+              Cancel Edit
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+              Edit Profile
+            </>
+          )}
+        </button>
+      </div >
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
@@ -162,32 +198,88 @@ function EmployeeProfile() {
           <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm p-8 flex flex-col items-center text-center relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-32 h-32 bg-primary-600/5 rounded-full -mr-16 -mt-16 transition-transform duration-700 group-hover:scale-150" />
 
-            <div className="w-24 h-24 rounded-3xl bg-primary-600 text-white flex items-center justify-center font-black text-4xl shadow-2xl shadow-primary-200 mb-6 relative z-10 border-4 border-white">
-              {employee.name?.charAt(0).toUpperCase()}
-            </div>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">{employee.name}</h2>
-            <p className="text-slate-500 font-medium mb-6">{employee.email}</p>
+            {isEditing ? (
+              <form onSubmit={handleUpdateProfile} className="w-full space-y-4 relative z-10 text-left">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Name</label>
+                  <input
+                    required
+                    type="text"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-4 focus:ring-primary-50 outline-none transition text-sm font-bold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Email</label>
+                  <input
+                    required
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-4 focus:ring-primary-50 outline-none transition text-sm font-bold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Role</label>
+                  <select
+                    value={editForm.role}
+                    onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-4 focus:ring-primary-50 outline-none transition text-sm font-bold bg-white"
+                  >
+                    {["developer", "seo", "designer", "marketing"].map(r => <option key={r} value={r} className="capitalize">{r}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Joining Date</label>
+                  <input
+                    required
+                    type="date"
+                    value={editForm.joiningDate}
+                    onChange={(e) => setEditForm({ ...editForm, joiningDate: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-4 focus:ring-primary-50 outline-none transition text-sm font-bold"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={updating}
+                  className="w-full py-3 bg-primary-600 text-white rounded-2xl font-bold shadow-lg shadow-primary-100 hover:bg-primary-700 transition flex items-center justify-center gap-2"
+                >
+                  {updating ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Save Changes"}
+                </button>
+              </form>
+            ) : (
+              <>
+                <div className="w-24 h-24 rounded-3xl bg-primary-600 text-white flex items-center justify-center font-black text-4xl shadow-2xl shadow-primary-200 mb-6 relative z-10 border-4 border-white">
+                  {employee.name?.charAt(0).toUpperCase()}
+                </div>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">{employee.name}</h2>
+                <p className="text-slate-500 font-medium mb-6">{employee.email}</p>
 
-            <div className="flex flex-wrap justify-center gap-2 mb-8">
-              <span className="px-4 py-1.5 bg-primary-50 text-primary-700 rounded-xl text-[10px] font-black uppercase tracking-widest border border-primary-100">
-                {employee.role}
-              </span>
-              <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border shadow-sm ${employee.isBlocked ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
-                }`}>
-                {employee.isBlocked ? "Blocked" : "Active"}
-              </span>
-            </div>
+                <div className="flex flex-wrap justify-center gap-2 mb-8">
+                  <span className="px-4 py-1.5 bg-primary-50 text-primary-700 rounded-xl text-[10px] font-black uppercase tracking-widest border border-primary-100">
+                    {employee.role}
+                  </span>
+                  <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border shadow-sm ${employee.isBlocked ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                    }`}>
+                    {employee.isBlocked ? "Blocked" : "Active"}
+                  </span>
+                </div>
 
-            <div className="w-full pt-8 border-t border-slate-50 space-y-5">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 font-black uppercase text-[10px] tracking-widest">Joined</span>
-                <span className="text-slate-700 font-bold text-sm bg-slate-50 px-3 py-1 rounded-lg">{new Date(employee.createdAt).toLocaleDateString("en-IN", { month: 'short', year: 'numeric' })}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 font-black uppercase text-[10px] tracking-widest">Employee ID</span>
-                <span className="text-slate-900 font-mono text-xs font-black bg-slate-50 px-3 py-1 rounded-lg border border-slate-100">{employee._id.slice(-6).toUpperCase()}</span>
-              </div>
-            </div>
+                <div className="w-full pt-8 border-t border-slate-50 space-y-5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-black uppercase text-[10px] tracking-widest">Joined</span>
+                    <span className="text-slate-700 font-bold text-sm bg-slate-50 px-3 py-1 rounded-lg">
+                      {new Date(employee.joiningDate || employee.createdAt).toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-black uppercase text-[10px] tracking-widest">Employee ID</span>
+                    <span className="text-slate-900 font-mono text-xs font-black bg-slate-50 px-3 py-1 rounded-lg border border-slate-100">{employee._id.slice(-6).toUpperCase()}</span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Attendance Summary Section */}
@@ -331,28 +423,28 @@ function EmployeeProfile() {
                           <td className="px-8 py-6">
                             <div className="flex flex-col">
                               <span className="text-sm font-black text-slate-700">
-                                {new Date(l.startDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short' })} - {new Date(l.endDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short' })}
+                                {formatLeaveDate(l.startDate, { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" })} - {formatLeaveDate(l.endDate, { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" })}
                               </span>
                               <span className="text-[11px] text-slate-400 font-medium italic mt-0.5 truncate max-w-[200px]">{l.reason}</span>
                             </div>
                           </td>
                           <td className="px-6 py-6">
                             <span className="px-3 py-1.5 bg-slate-50 text-slate-900 text-xs font-black rounded-xl border border-slate-100 group-hover:bg-white transition-colors">
-                              {calculateDays(l.startDate, l.endDate)}D
+                              {calculateLeaveDays(l.startDate, l.endDate)}D
                             </span>
                           </td>
                           <td className="px-6 py-6">
                             <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${l.leaveType === 'unpaid'
-                                ? 'bg-slate-50 text-slate-400 border-slate-200'
-                                : 'bg-blue-50 text-blue-600 border-blue-100'
+                              ? 'bg-slate-50 text-slate-400 border-slate-200'
+                              : 'bg-blue-50 text-blue-600 border-blue-100'
                               }`}>
                               {l.leaveType || 'paid'}
                             </span>
                           </td>
                           <td className="px-6 py-6 text-right">
                             <span className={`px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-sm border ${l.status === 'approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-                                l.status === 'rejected' ? 'bg-rose-50 text-rose-700 border-rose-100' :
-                                  'bg-amber-50 text-amber-700 border-amber-100'
+                              l.status === 'rejected' ? 'bg-rose-50 text-rose-700 border-rose-100' :
+                                'bg-amber-50 text-amber-700 border-amber-100'
                               }`}>
                               {l.status}
                             </span>
@@ -367,7 +459,7 @@ function EmployeeProfile() {
           </div>
         </div>
       </div>
-    </div>
+    </div >
   );
 }
 
