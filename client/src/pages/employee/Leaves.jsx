@@ -145,11 +145,13 @@ function Leaves() {
   // 📊 Stats Logic
   const stats = useMemo(() => {
     const total = balanceData.maxLimit;
-    const approved = myLeaves.filter(l => l.status === "approved");
+    // Only count leaves where the user IS the target (not just the applicant)
+    const personalLeaves = myLeaves.filter(l => (l.user?._id || l.user) === user.id);
+    const approved = personalLeaves.filter(l => l.status === "approved");
     const taken = approved.reduce((sum, l) => sum + getDisplayDays(l), 0);
-    const pending = myLeaves.filter(l => l.status === "pending").length;
+    const pending = personalLeaves.filter(l => l.status === "pending").length;
     return { total, taken, remaining: balanceData.balance, pending };
-  }, [myLeaves, balanceData]);
+  }, [myLeaves, balanceData, user.id]);
 
   // 🔍 Filter Logic
   const filteredLeaves = useMemo(() => {
@@ -298,6 +300,11 @@ function Leaves() {
                         {l.selectedDates?.length > 1 && (
                           <span className="bg-slate-50 text-slate-400 px-1.5 py-0.5 rounded text-[9px] font-bold">+{l.selectedDates.length - 1} DAYS</span>
                         )}
+                        {(l.user?._id || l.user) !== user.id && (
+                          <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                            For: {l.user?.name || "Colleague"}
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-slate-500 italic mt-0.5 max-w-sm line-clamp-1 truncate">
                         {l.reason || "No reason provided"}
@@ -308,8 +315,8 @@ function Leaves() {
                   <div className="flex items-center justify-between lg:justify-end gap-6">
                     <div className="text-right flex flex-col">
                       <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border self-end ${l.leaveType === 'unpaid'
-                          ? 'bg-slate-50 text-slate-400 border-slate-100'
-                          : 'bg-primary-50 text-primary-600 border-primary-50'
+                        ? 'bg-slate-50 text-slate-400 border-slate-100'
+                        : 'bg-primary-50 text-primary-600 border-primary-50'
                         }`}>
                         {l.leaveType || 'paid'}
                       </span>
@@ -318,8 +325,8 @@ function Leaves() {
 
                     <div className="flex items-center gap-3">
                       <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] ${l.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
-                          l.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                            'bg-rose-100 text-rose-700'
+                        l.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                          'bg-rose-100 text-rose-700'
                         }`}>
                         {l.status}
                       </span>
@@ -363,27 +370,28 @@ function Leaves() {
 
             <form onSubmit={submitLeave} className="space-y-6">
 
-              {user.role === 'admin' && (
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Mode</label>
-                  <div className="flex gap-2 p-1 bg-slate-50 rounded-xl border border-slate-100">
-                    {["self", "other"].map(opt => (
-                      <button key={opt} type="button" onClick={() => setAppliedFor(opt)}
-                        className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${appliedFor === opt ? "bg-white text-primary-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
-                          }`}>
-                        {opt === "self" ? "Self" : "On Behalf"}
-                      </button>
-                    ))}
-                  </div>
-                  {appliedFor === "other" && (
-                    <select className="w-full h-12 px-5 rounded-xl bg-slate-50 border border-slate-100 text-sm font-bold text-slate-700 outline-none"
-                      value={targetUserId} onChange={(e) => setTargetUserId(e.target.value)} required>
-                      <option value="">Employee...</option>
-                      {employees.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
-                    </select>
-                  )}
+              {/* Always allow "self" vs "other" choice for todos/co-employees */}
+              <div className="space-y-3">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Mode</label>
+                <div className="flex gap-2 p-1 bg-slate-50 rounded-xl border border-slate-100">
+                  {["self", "other"].map(opt => (
+                    <button key={opt} type="button" onClick={() => setAppliedFor(opt)}
+                      className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${appliedFor === opt ? "bg-white text-primary-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                        }`}>
+                      {opt === "self" ? "Self" : "On Behalf"}
+                    </button>
+                  ))}
                 </div>
-              )}
+
+                {appliedFor === "other" && (
+                  <select className="w-full h-12 px-5 rounded-xl bg-slate-50 border border-slate-100 text-sm font-bold text-slate-700 outline-none"
+                    value={targetUserId} onChange={(e) => setTargetUserId(e.target.value)} required>
+                    <option value="">Employee...</option>
+                    {/* Filter out self from the on-behalf list */}
+                    {employees.filter(e => e._id !== user.id).map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
+                  </select>
+                )}
+              </div>
 
               <div className="space-y-3">
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Select Dates</label>
@@ -415,14 +423,36 @@ function Leaves() {
                       const disabled = isDateDisabled(date);
                       const isSelected = selectedDates.some(d => d.toLocaleDateString('en-CA') === key);
                       const isToday = date.toLocaleDateString('en-CA') === today.toLocaleDateString('en-CA');
+                      
+                      // Identify special off-days for coloring
+                      const sun = date.getDay() === 0;
+                      const sat = date.getDay() === 6;
+                      const dateNum = date.getDate();
+                      const isOffSat = sat && ((dateNum >= 8 && dateNum <= 14) || (dateNum >= 22 && dateNum <= 28));
+
+                      let statusClasses = "";
+                      if (isSelected) {
+                        statusClasses = "bg-primary-600 text-white shadow-md shadow-primary-100";
+                      } else if (isToday) {
+                        statusClasses = "bg-white text-primary-600 border border-primary-100";
+                      } else if (sun) {
+                        statusClasses = "bg-rose-50 text-rose-500 border border-rose-100/50";
+                      } else if (isOffSat) {
+                        statusClasses = "bg-amber-50 text-amber-600 border border-amber-100/50";
+                      } else if (disabled) {
+                        statusClasses = "text-slate-200 cursor-not-allowed";
+                      } else {
+                        statusClasses = "bg-white text-slate-700 border border-slate-50 hover:border-primary-100 hover:text-primary-600";
+                      }
 
                       return (
-                        <button key={key} type="button" disabled={disabled} onClick={() => toggleDate(date)}
-                          className={`h-9 w-full rounded-xl text-xs font-black transition-all ${disabled ? "text-slate-100 cursor-not-allowed" :
-                              isSelected ? "bg-primary-600 text-white shadow-md shadow-primary-100" :
-                                isToday ? "bg-white text-primary-600 border border-primary-100" :
-                                  "bg-white text-slate-800 border border-slate-50 hover:border-primary-100 hover:text-primary-600"
-                            }`}>
+                        <button 
+                          key={key} 
+                          type="button" 
+                          disabled={disabled} 
+                          onClick={() => toggleDate(date)}
+                          className={`h-9 w-full rounded-xl text-xs font-black transition-all flex items-center justify-center ${statusClasses} ${disabled ? "cursor-not-allowed" : ""}`}
+                        >
                           {date.getDate()}
                         </button>
                       );

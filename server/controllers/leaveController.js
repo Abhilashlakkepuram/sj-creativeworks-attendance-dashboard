@@ -221,7 +221,15 @@ const getLeaves = async (req, res) => {
 // ─────────────────────────────────────────────
 const getMyLeaves = async (req, res) => {
   try {
-    const leaves = await Leave.find({ user: req.user.id }).sort({ createdAt: -1 });
+    // Fetch leaves where I am either the direct user OR I was the applicant for someone else
+    const leaves = await Leave.find({
+      $or: [
+        { user: req.user.id },
+        { requestedBy: req.user.id }
+      ]
+    })
+    .populate("user", "name email role")
+    .sort({ createdAt: -1 });
 
     res.json({
       success: true,

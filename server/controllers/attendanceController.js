@@ -217,7 +217,7 @@ const getMyAttendance = async (req, res) => {
 
             // [NEW] Fetch holidays for this range
             const holidays = await Holiday.find({
-                date: { $gte: rangeStart, $lte: today }
+                date: { $gte: cursor, $lte: today }
             }).lean();
             const holidayYMDs = holidays.map(h => getISTYMD(h.date));
 
