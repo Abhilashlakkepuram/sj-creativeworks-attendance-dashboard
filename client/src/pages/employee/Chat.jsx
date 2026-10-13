@@ -1,7 +1,8 @@
 import { useEffect, useState, useContext, useRef } from "react";
 import api from "../../services/api";
 import { SocketContext } from "../../socket/SocketContext";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
+import { resolveAssetUrl } from "../../config/urls";
 
 function Chat() {
   const { user } = useAuth();
@@ -15,11 +16,10 @@ function Chat() {
   const [text, setText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [roleUnreads, setRoleUnreads] = useState({});
+  const [attachment, setAttachment] = useState(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const [isUploading, setIsUploading] = useState(false);
-
-  const API_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.split('/api')[0] : "http://localhost:5000";
 
   // Available roles for channels
   const availableRoles = user.role === "admin"
@@ -31,10 +31,6 @@ function Chat() {
     if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
       Notification.requestPermission();
     }
-  }, []);
-
-  useEffect(() => {
-    api.get("/chat/users").then(res => setUsers(res.data));
   }, []);
 
   // Scroll to bottom when messages update
@@ -57,34 +53,43 @@ function Chat() {
     }
   }, [selectedUser, selectedRole, socket, user.id]);
 
-  // Load users once
+  // Load users and role unread counts once the socket context is ready.
   useEffect(() => {
-    const fetchUsers = () => {
-      api.get("/chat/users").then(res => {
-        setUsers(res.data);
+    let active = true;
 
-        // initialize chat list directly from enriched backend payload
-        const initialChats = res.data.map(u => ({
+    const fetchChatData = async () => {
+      try {
+        const [usersRes, roleUnreadRes] = await Promise.all([
+          api.get("/chat/users"),
+          api.get("/chat/unread-roles"),
+        ]);
+
+        if (!active) return;
+        const chatUsers = usersRes.data || [];
+        setUsers(chatUsers);
+        setRoleUnreads(roleUnreadRes.data || {});
+        setChatList(chatUsers.map((u) => ({
           user: { _id: u._id, name: u.name, role: u.role },
           lastMessage: u.lastMessage || "",
           time: u.time || null,
-          unread: u.unread || 0
-        }));
-
-        setChatList(initialChats);
-      });
+          unread: u.unread || 0,
+        })));
+      } catch (error) {
+        console.error("Failed to load chat data", error);
+      }
     };
 
-    fetchUsers();
+    fetchChatData();
 
     // Listen for dashboard updates (new user registered/approved/deleted)
     if (socket) {
-      socket.on("dashboard-update", fetchUsers);
-      return () => socket.off("dashboard-update", fetchUsers);
+      socket.on("dashboard-update", fetchChatData);
     }
 
-    // Fetch initial role unread counts
-    api.get("/chat/unread-roles").then(res => setRoleUnreads(res.data));
+    return () => {
+      active = false;
+      if (socket) socket.off("dashboard-update", fetchChatData);
+    };
   }, [socket]);
 
 
@@ -143,7 +148,7 @@ function Chat() {
 
           const updatedChat = {
             user: existing?.user || users.find(u => u._id === otherUserId),
-            lastMessage: msg.message,
+            lastMessage: msg.message || (msg.fileUrl ? "📁 Shared a file" : ""),
             time: msg.createdAt,
             unread: isChatOpen ? 0 : (existing?.unread || 0) + 1
           };
@@ -195,20 +200,21 @@ function Chat() {
         headers: { "Content-Type": "multipart/form-data" }
       });
       
-      // Auto-send message with file
-      sendMessage(null, res.data);
+      setAttachment(res.data);
     } catch (err) {
       alert(err.response?.data?.message || "File upload failed");
+      setAttachment(null);
     } finally {
       setIsUploading(false);
       e.target.value = null; // Reset input
     }
   };
 
-  const sendMessage = (e, fileData = null) => {
+  const sendMessage = (e, fileData = attachment) => {
     if (e) e.preventDefault();
     if (!text.trim() && !fileData) return;
     if (!selectedUser && !selectedRole) return;
+    if (!socket) return;
 
     const payload = {
       senderId: user.id,
@@ -224,6 +230,7 @@ function Chat() {
 
     socket.emit("send-message", payload);
     setText("");
+    setAttachment(null);
   };
 
   const handleSelectUser = (u) => {
@@ -499,7 +506,7 @@ function Chat() {
                             : "bg-white text-slate-800 border border-slate-200 rounded-2xl rounded-tl-sm"
                             }`}>
                             {user.role === "admin" && selectedRole && !isMe && (
-                              <div className="text-[10px] font-bold text-primary-500 mb-1">Employe Msg</div>
+                               <div className="text-[10px] font-bold text-primary-500 mb-1">Employee message</div>
                             )}
                             
                             {/* File Display */}
@@ -507,14 +514,14 @@ function Chat() {
                               <div className="mb-2">
                                 {isImage ? (
                                   <img 
-                                    src={`${API_URL}${m.fileUrl}`} 
+                                     src={resolveAssetUrl(m.fileUrl)}
                                     alt="Shared media" 
                                     className="max-w-full rounded-lg border border-white/20 shadow-sm transition-transform hover:scale-[1.02] cursor-pointer"
-                                    onClick={() => window.open(`${API_URL}${m.fileUrl}`, '_blank')}
+                                     onClick={() => window.open(resolveAssetUrl(m.fileUrl), '_blank')}
                                   />
                                 ) : (
                                   <a 
-                                    href={`${API_URL}${m.fileUrl}`} 
+                                     href={resolveAssetUrl(m.fileUrl)}
                                     target="_blank" 
                                     rel="noreferrer"
                                     className={`flex items-center gap-3 p-3 rounded-xl border ${isMe ? 'bg-primary-700/50 border-primary-500 text-white' : 'bg-slate-50 border-slate-200 text-slate-700'} hover:bg-opacity-80 transition-all`}
@@ -579,7 +586,13 @@ function Chat() {
                     </svg>
                   )}
                 </button>
-                <input 
+                   {attachment && (
+                     <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-primary-100 rounded-lg text-xs text-slate-600 shrink-0 max-w-[45%]">
+                       <span className="truncate" title={attachment.fileName}>{attachment.fileName || "Attached file"}</span>
+                       <button type="button" onClick={() => setAttachment(null)} className="text-slate-400 hover:text-rose-500" aria-label="Remove attachment">×</button>
+                     </div>
+                   )}
+                   <input
                   type="file" 
                   ref={fileInputRef} 
                   onChange={handleFileChange} 
@@ -596,7 +609,7 @@ function Chat() {
                   />
                   <button
                     type="submit"
-                    disabled={!text.trim() || isUploading}
+                     disabled={(!text.trim() && !attachment) || isUploading || !socket}
                     className="w-10 h-10 rounded-xl bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 shadow-sm"
                   >
                     <svg className="w-5 h-5 ml-1" fill="currentColor" viewBox="0 0 20 20">

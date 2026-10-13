@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 require("dotenv").config();
 const User = require("./models/User");
+const { isStrongPassword, PASSWORD_MESSAGE } = require("./utils/validation");
 
 const seedAdmin = async () => {
   try {
@@ -16,7 +17,10 @@ const seedAdmin = async () => {
     console.log("Connected Successfully.");
 
     const adminEmail = "admin@sjcreativeworks.com";
-    const adminPassword = "Sjcwadmin123!"; // Added ! for special character requirement
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    if (!isStrongPassword(adminPassword)) {
+      throw new Error(`ADMIN_PASSWORD is required and must be strong. ${PASSWORD_MESSAGE}`);
+    }
 
     const existingAdmin = await User.findOne({ email: adminEmail });
 
@@ -40,7 +44,7 @@ const seedAdmin = async () => {
     console.log("-----------------------------------------");
     console.log("✅ Admin user created successfully!");
     console.log(`📧 Email: ${adminEmail}`);
-    console.log(`🔑 Password: ${adminPassword}`);
+    console.log("Use the configured ADMIN_PASSWORD to sign in.");
     console.log("-----------------------------------------");
 
     process.exit(0);

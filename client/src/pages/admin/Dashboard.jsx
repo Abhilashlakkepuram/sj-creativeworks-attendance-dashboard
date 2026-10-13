@@ -1,18 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { useContext } from "react";
 import { SocketContext } from "../../socket/SocketContext";
-
-// ─── Role Colors ─────────────────────────────────────────────────────────────
-const roleColors = {
-  developer: "bg-sky-100 text-sky-700",
-  seo: "bg-violet-100 text-violet-700",
-  designer: "bg-pink-100 text-pink-700",
-  marketing: "bg-amber-100 text-amber-700",
-  admin: "bg-emerald-100 text-emerald-700",
-};
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 function SkeletonCard() {
@@ -69,60 +60,14 @@ function StatCard({ card, onClick }) {
   );
 }
 
-// ─── Pending Card ─────────────────────────────────────────────────────────────
-function PendingCard({ user, onApprove, onReject, loading }) {
-  const roleColor = roleColors[user.role] || "bg-slate-100 text-slate-700";
-  const initials = user.name?.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
-
-  return (
-    <div className="flex items-center gap-4 p-4 rounded-xl border border-slate-200 bg-white hover:border-primary-300 hover:shadow-md transition-all duration-200">
-      <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-sm">
-        {initials}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-slate-800 truncate">{user.name}</p>
-        <p className="text-xs text-slate-500 truncate">{user.email}</p>
-      </div>
-      <span className={`hidden sm:inline-flex px-2.5 py-1 text-xs font-semibold rounded-full capitalize shrink-0 ${roleColor}`}>
-        {user.role}
-      </span>
-      <div className="flex gap-2 shrink-0">
-        <button
-          onClick={() => onApprove(user._id)}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50 shadow-sm"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-          </svg>
-          Approve
-        </button>
-        <button
-          onClick={() => onReject(user._id)}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 hover:border-rose-300 text-xs font-semibold rounded-lg transition-colors disabled:opacity-50 shadow-sm"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-          Reject
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 function Dashboard() {
   const { user } = useAuth();
   const socket = useContext(SocketContext);
   const navigate = useNavigate();
-  const pendingSectionRef = useRef(null);
 
   const [stats, setStats] = useState({ totalEmployees: 0, todayAttendance: 0, lateEmployees: 0 });
-  const [pending, setPending] = useState([]);
   const [statsLoading, setStatsLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
   const [notification, setNotification] = useState(null);
 
   const showNotification = (msg, type = "success") => {
@@ -133,53 +78,12 @@ function Dashboard() {
   const fetchData = async () => {
     setStatsLoading(true);
     try {
-      const [statsRes, pendingRes] = await Promise.all([
-        api.get("/admin/dashboard-stats"),
-        api.get("/admin/pending-users"),
-      ]);
+      const statsRes = await api.get("/admin/dashboard-stats");
       setStats(statsRes.data);
-      setPending(pendingRes.data);
     } catch (err) {
       console.error(err);
     } finally {
       setStatsLoading(false);
-    }
-  };
-
-  const handleApprove = async (id) => {
-    setActionLoading(true);
-
-    // ✅ Optimistic UI
-    const oldPending = pending;
-    setPending(prev => prev.filter(u => u._id !== id));
-
-    try {
-      await api.patch(`/admin/approve-user/${id}`);
-      showNotification("Employee approved successfully!");
-    } catch {
-      setPending(oldPending); // rollback
-      showNotification("Failed to approve employee.", "error");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleReject = async (id) => {
-    if (!window.confirm("Are you sure you want to reject this employee?")) return;
-
-    setActionLoading(true);
-
-    const oldPending = pending;
-    setPending(prev => prev.filter(u => u._id !== id));
-
-    try {
-      await api.patch(`/admin/reject-user/${id}`);
-      showNotification("Employee request rejected.");
-    } catch {
-      setPending(oldPending);
-      showNotification("Failed to reject employee.", "error");
-    } finally {
-      setActionLoading(false);
     }
   };
 
@@ -264,7 +168,7 @@ function Dashboard() {
             Welcome, {user?.name || "Admin"}! <span className="text-2xl">👋</span>
           </h2>
           <p className="mt-2 text-slate-500 font-medium">
-            Here's what's happening with SJ Creativeworks today.
+             Here's what's happening with Vision Thoughts today.
           </p>
         </div>
         <div className="hidden md:block">

@@ -14,6 +14,7 @@ const messageSchema = new mongoose.Schema(
         },
         roleReceiver: {
             type: String,
+            enum: ["developer", "seo", "designer", "marketing", "admin"],
             required: false
         },
         isGroupMessage: {

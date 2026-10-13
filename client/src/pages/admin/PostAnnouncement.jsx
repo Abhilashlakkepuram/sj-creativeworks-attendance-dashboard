@@ -39,7 +39,7 @@ function PostAnnouncement() {
       setForm({ title: "", message: "", priority: "medium", targetRole: "all" });
       fetchAnnouncements();
       alert("Announcement posted successfully!");
-    } catch (err) {
+    } catch {
       alert("Failed to post announcement");
     } finally {
       setPostLoading(false);
@@ -51,7 +51,7 @@ function PostAnnouncement() {
     try {
       await api.delete(`/announcements/${id}`);
       fetchAnnouncements();
-    } catch (err) {
+    } catch {
       alert("Failed to delete announcement");
     }
   };

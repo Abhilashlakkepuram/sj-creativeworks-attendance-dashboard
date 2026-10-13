@@ -49,9 +49,30 @@ const getISTYMD = (date) => {
  */
 const getTodayRange = (referenceDate = new Date()) => {
   const parts = getISTDateParts(referenceDate);
-  const start = toUTC(parts.year, parts.month, parts.day, 0, 0, 0);
-  const end = toUTC(parts.year, parts.month, parts.day, 23, 59, 59);
+  return getISTDayRange(parts.year, parts.month, parts.day);
+};
+
+/**
+ * Gets the UTC instants covering one IST calendar day.
+ */
+const getISTDayRange = (year, month, day) => {
+  const start = toUTC(year, month, day, 0, 0, 0);
+  const nextStart = toUTC(year, month, day + 1, 0, 0, 0);
+  const end = new Date(nextStart.getTime() - 1);
   return { start, end };
+};
+
+/**
+ * Gets an IST day range from a strict YYYY-MM-DD value.
+ */
+const getISTDayRangeFromYMD = (value) => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+  const range = getISTDayRange(year, month, day);
+  return getISTYMD(range.start) === value ? range : null;
 };
 
 /**
@@ -100,6 +121,8 @@ module.exports = {
   getISTDateParts,
   getISTYMD,
   getTodayRange,
+  getISTDayRange,
+  getISTDayRangeFromYMD,
   isOfficeHoliday,
   isPublicHoliday,
   isBeforeJoining,

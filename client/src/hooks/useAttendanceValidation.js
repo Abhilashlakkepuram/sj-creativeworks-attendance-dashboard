@@ -42,7 +42,6 @@ export const useAttendanceValidation = () => {
 
                 if (distance > MAX_DISTANCE) {
                     setStatus("error");
-                    const distKm = (distance / 1000).toFixed(2);
                     setMessage(`You are outside office location ❌ (${Math.round(distance)}m away)`);
                 } else {
                     setStatus("success");

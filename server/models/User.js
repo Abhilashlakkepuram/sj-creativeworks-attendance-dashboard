@@ -35,12 +35,16 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  resetOTP: String,
-  resetOTPExpires: Date,
+  resetOTP: { type: String, select: false },
+  resetOTPExpires: { type: Date, select: false },
   resetAttempts: {
     type: Number,
-    default: 0
+    default: 0,
+    select: false
   },
+  resetOTPLastSent: { type: Date, select: false },
+  resetOTPWindowStart: { type: Date, select: false },
+  resetOTPSendCount: { type: Number, default: 0, select: false },
   roleReadTimestamps: {
     type: Map,
     of: Date,

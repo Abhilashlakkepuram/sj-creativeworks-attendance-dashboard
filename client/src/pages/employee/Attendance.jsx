@@ -1,24 +1,17 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import api from "../../services/api";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { getISTDateKey, getISTDayOfWeek, getTodayISTDateKey } from "../../utils/timezone";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const formatTime = (dt) =>
   dt ? new Date(dt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
 
 const formatDate = (dt) =>
-  new Date(dt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-
-const calcHours = (punchIn, punchOut) => {
-  if (!punchIn || !punchOut) return null;
-  const diff = new Date(punchOut) - new Date(punchIn);
-  const h = Math.floor(diff / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  return `${h}h ${m}m`;
-};
+  new Date(dt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 const StatusBadge = ({ status, missedPunchOut }) => {
@@ -74,7 +67,7 @@ function EmployeeAttendance() {
   const LIMIT = 30;
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
-  const fetchData = async (pg = 1) => {
+  const fetchData = useCallback(async (pg = 1) => {
     try {
       setLoading(true);
       const endpoint = id ? `/admin/attendance/user/${id}` : "/attendance/my-attendance";
@@ -86,12 +79,10 @@ function EmployeeAttendance() {
       let records = payload.data || (Array.isArray(payload) ? payload : []);
       
       // Auto-tag missed punch-outs dynamically for the frontend
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
-      records = records.map(d => {
-        const recordDate = new Date(d.date);
-        recordDate.setHours(0, 0, 0, 0);
-        if (d.punchIn && !d.punchOut && recordDate < startOfToday) {
+       const today = getTodayISTDateKey();
+       records = records.map(d => {
+         const recordDate = getISTDateKey(d.date);
+         if (d.punchIn && !d.punchOut && recordDate < today) {
           return { ...d, missedPunchOut: true };
         }
         return d;
@@ -111,7 +102,7 @@ function EmployeeAttendance() {
         try {
           const empRes = await api.get(`/admin/employee/${id}`);
           setEmployee(empRes.data);
-        } catch (e) {
+        } catch {
           if (records?.length > 0 && records[0].user?.name) setEmployee(records[0].user);
         }
       } else {
@@ -126,9 +117,9 @@ function EmployeeAttendance() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentUser, id]);
 
-  useEffect(() => { fetchData(page); }, [id, page]);
+  useEffect(() => { fetchData(page); }, [fetchData, page]);
 
   // ── Filtered view (client-side on current page) ───────────────────────────
   const filtered = data.filter(d => {
@@ -144,7 +135,7 @@ function EmployeeAttendance() {
     const doc = new jsPDF();
 
     doc.setFontSize(16);
-    doc.text("SJ Creativeworks", 14, 16);
+     doc.text("Vision Thoughts", 14, 16);
     doc.setFontSize(11);
     doc.text("Employee Attendance Report", 14, 23);
     doc.text(`Name: ${employee?.name || "—"}`, 14, 30);
@@ -173,7 +164,7 @@ function EmployeeAttendance() {
       alternateRowStyles: { fillColor: [248, 250, 252] }
     });
 
-    doc.save(`attendance_${employee?.name || "employee"}.pdf`);
+     doc.save(`vision-thoughts-attendance_${employee?.name || "employee"}.pdf`);
   };
 
   // ── UI ────────────────────────────────────────────────────────────────────
@@ -275,10 +266,9 @@ function EmployeeAttendance() {
                 </tr>
               ) : (
                 filtered.map((d) => {
-                  const hours = calcHours(d.punchIn, d.punchOut);
-                  const statusLower = (d.status || "").toLowerCase();
+                   const statusLower = (d.status || "").toLowerCase();
                   const isAbsent = statusLower === "absent";
-                  const isWeekend = new Date(d.date).getDay() === 0;
+                   const isWeekend = getISTDayOfWeek(d.date) === 0;
 
                   return (
                     <tr

@@ -1,18 +1,17 @@
 import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
 import { SocketContext } from "./SocketContext";
-import { useAuth } from "../context/AuthContext";
-
-const SOCKET_URL = import.meta.env.VITE_API_URL 
-  ? import.meta.env.VITE_API_URL.split('/api')[0] 
-  : "http://localhost:5000";
+import { useAuth } from "../context/useAuth";
+import { SOCKET_URL } from "../config/urls";
 
 function SocketProvider({ children }) {
   const [socket, setSocket] = useState(null);
   const { user } = useAuth();
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      return undefined;
+    }
 
     const newSocket = io(SOCKET_URL, {
       transports: ["websocket", "polling"], // ✅ IMPORTANT
@@ -25,18 +24,18 @@ function SocketProvider({ children }) {
     newSocket.on("connect", () => {
       console.log("✅ Socket connected:", newSocket.id);
       newSocket.emit("join", { userId: user.id, role: user.role });
+      setSocket(newSocket);
     });
 
     newSocket.on("disconnect", () => {
       console.log("❌ Socket disconnected");
     });
 
-    setSocket(newSocket);
-
     return () => {
       newSocket.disconnect();
+      setSocket(null);
     };
-  }, [user?.id]);
+  }, [user]);
 
   return (
     <SocketContext.Provider value={socket}>

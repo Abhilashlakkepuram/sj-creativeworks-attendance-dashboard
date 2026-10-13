@@ -13,7 +13,7 @@ try {
     console.log("ℹ️ Resend API key not set. Using SMTP only.");
   }
 } catch (e) {
-  console.warn("⚠️ Resend package unavailable, using SMTP only:", e.message);
+    console.warn("⚠️ Resend initialization failed, using SMTP only.");
 }
 
 // ─────────────────────────────────────────────────────
@@ -28,7 +28,6 @@ const createTransporter = (port) => {
       user: process.env.SMTP_EMAIL,
       pass: process.env.SMTP_PASSWORD
     },
-    tls: { rejectUnauthorized: false },
     connectionTimeout: 5000,
     greetingTimeout: 5000,
     socketTimeout: 10000
@@ -37,17 +36,6 @@ const createTransporter = (port) => {
 
 // Initial transporter
 let transporter = createTransporter(parseInt(process.env.SMTP_PORT) || 465);
-
-// Verify SMTP on startup
-transporter.verify((error) => {
-  if (error) {
-    console.warn(`⚠️ SMTP Connection Check (Port ${transporter.options.port}) failed: ${error.message}`);
-    console.warn("💡 If using Gmail, make sure you're using an App Password (not your regular password).");
-    console.warn("   Generate one at: https://myaccount.google.com/apppasswords");
-  } else {
-    console.log(`🟢 SMTP Server is ready (Port ${transporter.options.port}) via ${process.env.SMTP_HOST || "smtp.gmail.com"}`);
-  }
-});
 
 /**
  * High-reliability email sender
@@ -60,13 +48,10 @@ transporter.verify((error) => {
  *   SMTP_PASSWORD=your_16_char_app_password  ← NOT your regular password
  */
 const sendEmail = async (to, subject, html) => {
-  let lastError = "Unknown error";
-
   // 1️⃣ TRY RESEND (only if key is configured)
   if (resend) {
     try {
-      console.log(`📡 Sending via Resend to: ${to}`);
-      const { data, error } = await resend.emails.send({
+      const { data } = await resend.emails.send({
         from: process.env.RESEND_FROM || `SJ Creativeworks <onboarding@resend.dev>`,
         to: [to],
         subject,
@@ -74,23 +59,17 @@ const sendEmail = async (to, subject, html) => {
       });
 
       if (data && data.id) {
-        console.log("✅ Email sent via Resend:", data.id);
         return { success: true };
       }
 
-      console.error("❌ Resend API Error:", error?.message || error);
-      lastError = error?.message || error;
-      console.log("🔄 Switching to SMTP fallback...");
+      console.warn("Resend delivery failed; trying SMTP fallback.");
     } catch (e) {
-      console.error("❌ Resend exception:", e.message);
-      lastError = e.message;
-      console.log("🔄 Switching to SMTP fallback...");
+      console.warn("Resend delivery failed; trying SMTP fallback.");
     }
   }
 
   // 2️⃣ TRY PRIMARY SMTP (Gmail / Zoho / any)
   try {
-    console.log(`📡 Sending via SMTP (${process.env.SMTP_HOST || "smtp.gmail.com"}) to: ${to}`);
     await transporter.sendMail({
       from: `"SJ Creativeworks" <${process.env.SMTP_EMAIL}>`,
       to,
@@ -100,8 +79,7 @@ const sendEmail = async (to, subject, html) => {
     console.log("✅ Email sent via SMTP.");
     return { success: true };
   } catch (error) {
-    lastError = error.message;
-    console.error(`❌ SMTP Port ${transporter.options.port} failed:`, error.message);
+    console.warn("SMTP delivery failed.");
 
     // 3️⃣ TRY SMTP PORT FALLBACK (465 -> 587)
     if (transporter.options.port !== 587) {
@@ -119,13 +97,12 @@ const sendEmail = async (to, subject, html) => {
         return { success: true };
       } catch (fallbackError) {
         console.error("❌ All email methods failed.");
-        lastError = fallbackError.message;
       }
     } else {
-      console.error(`❌ SMTP failed and no more fallbacks available. Last error: ${lastError}`);
+      console.error("SMTP failed and no more fallbacks available.");
     }
 
-    return { error: true, errorMessage: lastError };
+    return { error: true, errorMessage: "Email delivery failed" };
   }
 };
 

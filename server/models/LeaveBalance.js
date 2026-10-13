@@ -9,6 +9,7 @@ const leaveBalanceSchema = new mongoose.Schema({
   },
   balance: {
     type: Number,
+    min: 0,
     default: 2
   },
   monthlyCredit: {

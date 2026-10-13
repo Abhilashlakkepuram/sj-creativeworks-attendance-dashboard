@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useContext } from "react";
+import { useCallback, useEffect, useState, useContext } from "react";
 import api from "../../services/api";
 import { SocketContext } from "../../socket/SocketContext";
 import { useNavigate } from "react-router-dom";
@@ -27,7 +27,7 @@ function Employees() {
     employeeName: ""
   });
 
-  const fetchEmployees = async () => {
+  const fetchEmployees = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -45,7 +45,7 @@ function Employees() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, role, search]);
 
   useEffect(() => {
     fetchEmployees();
@@ -55,7 +55,7 @@ function Employees() {
       socket.on("dashboard-update", fetchEmployees);
       return () => socket.off("dashboard-update", fetchEmployees);
     }
-  }, [search, role, page, socket]);
+  }, [fetchEmployees, socket]);
 
   const handleAddEmployee = async (e) => {
     e.preventDefault();
@@ -86,19 +86,10 @@ function Employees() {
       await api.delete(`/admin/delete-employee/${deleteModalConfig.employeeId}`);
       fetchEmployees();
       setDeleteModalConfig({ isOpen: false, employeeId: null, employeeName: "" });
-    } catch (err) {
+    } catch {
       alert("Failed to delete employee");
     } finally {
       setActionLoading(false);
-    }
-  };
-
-  const handleToggleBlock = async (id) => {
-    try {
-      await api.patch(`/admin/toggle-block-user/${id}`);
-      fetchEmployees();
-    } catch (err) {
-      alert("Failed to update status");
     }
   };
 
@@ -388,7 +379,7 @@ function Employees() {
                 <input
                   required
                   type="email"
-                  placeholder="john@sjcreativeworks.com"
+                   placeholder="john@visionthoughts.com"
                   value={newEmp.email}
                   onChange={(e) => setNewEmp({ ...newEmp, email: e.target.value })}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-primary-50 outline-none transition"

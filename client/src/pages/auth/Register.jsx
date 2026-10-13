@@ -3,7 +3,7 @@ import api from "../../config/axiosConfig";
 import { useNavigate, Link } from "react-router-dom";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
-import logo from "../../assets/sj-logo.png";
+import logo from "../../assets/visionthoughts.logo.jpeg";
 
 // ── Password Strength Helper ──────────────────────────────────────────
 const getPasswordStrength = (password) => {
@@ -90,11 +90,11 @@ function Register() {
                 <div className="absolute -bottom-10 -right-10 w-48 h-48 bg-secondary-500 rounded-full mix-blend-multiply filter blur-2xl opacity-60 animate-blob animation-delay-2000" />
 
                 <div className="relative z-10 flex items-center gap-4">
-                    <div className="w-12 h-12 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/20 p-1.5 flex-shrink-0">
-                        <img src={logo} alt="SJ Logo" className="w-full h-full object-contain" />
+                    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center border border-white/20 p-1.5 flex-shrink-0">
+                        <img src={logo} alt="Vision Thoughts" className="w-full h-full object-contain" />
                     </div>
                     <div>
-                        <h1 className="text-lg font-extrabold tracking-tight leading-tight">SJ Creativeworks</h1>
+                        <h1 className="text-lg font-extrabold tracking-tight leading-tight">Vision Thoughts</h1>
                         <p className="text-xs text-primary-200 mt-0.5">Join our team — apply below</p>
                     </div>
                 </div>
@@ -107,10 +107,10 @@ function Register() {
                 <div className="absolute bottom-[-10%] left-[20%] w-96 h-96 bg-primary-400 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000" />
 
                 <div className="relative z-10 text-center w-full max-w-lg">
-                    <div className="w-24 h-24 bg-white/10 backdrop-blur-lg rounded-2xl flex items-center justify-center mx-auto mb-8 border border-white/20 shadow-xl shadow-primary-500/20 p-2 overflow-hidden">
-                        <img src={logo} alt="SJ Creativeworks Logo" className="w-full h-full object-contain drop-shadow-md" />
+                    <div className="w-24 h-24 bg-white rounded-2xl flex items-center justify-center mx-auto mb-8 border border-white/20 shadow-xl shadow-primary-500/20 p-2 overflow-hidden">
+                        <img src={logo} alt="Vision Thoughts" className="w-full h-full object-contain drop-shadow-md" />
                     </div>
-                    <h1 className="text-5xl font-extrabold tracking-tight mb-6">SJ Creativeworks</h1>
+                    <h1 className="text-5xl font-extrabold tracking-tight mb-6">Vision Thoughts</h1>
                     <p className="text-lg text-primary-100 mb-10 leading-relaxed">
                         Join our team of developers, designers, and creatives. Streamline your workflow and track your daily progress with our intelligent attendance platform.
                     </p>
@@ -180,7 +180,7 @@ function Register() {
                             label="Email Address"
                             type="email"
                             name="email"
-                            placeholder="e.g. john@creativeworks.com"
+                            placeholder="e.g. john@visionthoughts.com"
                             onChange={handleChange}
                             value={formData.email}
                             required

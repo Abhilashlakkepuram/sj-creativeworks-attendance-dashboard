@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import { useSocket } from "../../socket/SocketContext";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { formatDistanceToNow } from "date-fns";
+import { getNotificationTarget } from "../../utils/notificationLink";
 
 const typeIcons = {
   attendance: "📅",
@@ -47,7 +48,7 @@ function NotificationBell() {
         setUnreadCount((prev) => prev + 1);
 
         if (Notification.permission === "granted") {
-          const title = notif.type === "announcement" ? "New Company Announcement" : "New SJCW Alert";
+           const title = notif.type === "announcement" ? "New Company Announcement" : "New Vision Thoughts Alert";
           const n = new Notification(title, { body: notif.message });
           n.addEventListener('click', (e) => {
             e.preventDefault();
@@ -55,23 +56,7 @@ function NotificationBell() {
             
             if (!notif.isRead) markAsRead(notif._id);
 
-            let targetLink = notif.link;
-            
-            // Support dynamic role-based path for chat if link is generic or wrong
-            if (notif.type === "chat") {
-              targetLink = role === "admin" ? "/admin/chat" : "/employee/chat";
-            }
-
-            if (!targetLink) {
-              targetLink = 
-                notif.type === "attendance" ? (role === "admin" ? "/admin/attendance" : "/employee/attendance") :
-                notif.type === "leave" ? (role === "admin" ? "/admin/leaves" : "/employee/leaves") :
-                notif.type === "registration" ? "/admin/employees" :
-                notif.type === "announcement" ? (role === "admin" ? "/admin/dashboard" : "/employee/dashboard") :
-                (role === "admin" ? "/admin/dashboard" : "/employee/dashboard");
-            }
-            
-            if (targetLink) navigate(targetLink);
+             navigate(getNotificationTarget(notif, role));
             n.close();
           });
         }
@@ -187,23 +172,7 @@ function NotificationBell() {
                     if (!notif.isRead) markAsRead(notif._id);
                     setIsOpen(false);
                     
-                    let targetLink = notif.link;
-
-                    // Support dynamic role-based path for chat if link is generic or wrong
-                    if (notif.type === "chat") {
-                      targetLink = role === "admin" ? "/admin/chat" : "/employee/chat";
-                    }
-
-                    if (!targetLink) {
-                      targetLink = 
-                        notif.type === "attendance" ? (role === "admin" ? "/admin/attendance" : "/employee/attendance") :
-                        notif.type === "leave" ? (role === "admin" ? "/admin/leaves" : "/employee/leaves") :
-                        notif.type === "registration" ? "/admin/employees" :
-                        notif.type === "announcement" ? (role === "admin" ? "/admin/dashboard" : "/employee/dashboard") :
-                        (role === "admin" ? "/admin/dashboard" : "/employee/dashboard");
-                    }
-                    
-                    if (targetLink) navigate(targetLink);
+                     navigate(getNotificationTarget(notif, role));
                   }}
                   className={`flex gap-4 px-5 py-4 border-b border-slate-50 cursor-pointer transition-colors ${!notif.isRead ? "bg-primary-50/30" : "hover:bg-slate-50"
                     }`}

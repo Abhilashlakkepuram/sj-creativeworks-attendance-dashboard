@@ -44,7 +44,7 @@ function Holidays() {
       setForm({ title: "", date: "", type: "public" });
       fetchHolidays();
       alert("Holiday added successfully!");
-    } catch (err) {
+    } catch {
       alert("Failed to add holiday");
     }
   };
@@ -54,7 +54,7 @@ function Holidays() {
     try {
       await api.delete(`/holidays/${id}`);
       fetchHolidays();
-    } catch (err) {
+    } catch {
       alert("Failed to delete holiday");
     }
   };

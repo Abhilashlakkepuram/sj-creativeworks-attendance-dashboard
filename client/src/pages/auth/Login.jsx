@@ -3,8 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import api from "../../config/axiosConfig";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
-import logo from "../../assets/sj-logo.png";
-import { useAuth } from "../../context/AuthContext";
+import logo from "../../assets/visionthoughts.logo.jpeg";
+import { useAuth } from "../../context/useAuth";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -55,10 +55,10 @@ const Login = () => {
         <div className="absolute bottom-[-10%] left-[20%] w-96 h-96 bg-primary-400 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000"></div>
 
         <div className="relative z-10 text-center w-full max-w-lg">
-          <div className="w-24 h-24 bg-white/10 backdrop-blur-lg rounded-2xl flex items-center justify-center mx-auto mb-8 border border-white/20 shadow-xl shadow-primary-500/20 p-2 overflow-hidden">
-            <img src={logo} alt="SJ Creativeworks Logo" className="w-full h-full object-contain drop-shadow-md" />
+          <div className="flex justify-center mb-8">
+            <img src={logo} alt="Vision Thoughts" className="w-52 h-52 object-cover rounded-3xl drop-shadow-[0_8px_32px_rgba(0,200,200,0.4)]" />
           </div>
-          <h1 className="text-5xl font-extrabold tracking-tight mb-6">SJ Creativeworks</h1>
+          <h1 className="text-5xl font-extrabold tracking-tight mb-6">Vision Thoughts</h1>
           <p className="text-lg text-primary-100 mb-10 leading-relaxed">
             Welcome back. Access your attendance dashboard and keep your records in sync.
           </p>
@@ -69,7 +69,7 @@ const Login = () => {
         <div className="w-full max-w-md">
           <div className="lg:hidden flex justify-center mb-6">
             <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-primary-600/20 p-2 border border-slate-100">
-              <img src={logo} alt="SJ Logo" className="w-full h-full object-contain" />
+              <img src={logo} alt="Vision Thoughts" className="w-full h-full object-contain" />
             </div>
           </div>
 
@@ -104,7 +104,7 @@ const Login = () => {
               label="Email Address"
               type="email"
               name="email"
-              placeholder="you@creativeworks.com"
+              placeholder="you@visionthoughts.com"
               onChange={handleChange}
               value={formData.email}
               required

@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
 import api from "../../services/api";
 import { useSocket } from "../../socket/SocketContext";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import Card, { CardContent } from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import { calculateLeaveDays, formatLeaveDate } from "../../utils/leaveDate";
+import { dateKeyToISTDate, getCalendarDateKey, getISTDateKey, getTodayCalendarDate } from "../../utils/timezone";
 
 function Leaves() {
   const { user } = useAuth();
@@ -31,8 +32,7 @@ function Leaves() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [balanceData, setBalanceData] = useState({ balance: 0, maxLimit: 6, monthlyCredit: 2 });
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = getTodayCalendarDate();
 
   // 🔄 Fetch Data
   const fetchMyLeaves = async () => {
@@ -109,8 +109,8 @@ function Leaves() {
   };
 
   const isPublicHoliday = (date) => {
-    const key = date.toLocaleDateString('en-CA');
-    return holidays.some(h => new Date(h.date).toLocaleDateString('en-CA') === key);
+    const key = getCalendarDateKey(date);
+    return holidays.some(h => getISTDateKey(h.date) === key);
   };
 
   const isDateDisabled = (date) => {
@@ -122,10 +122,10 @@ function Leaves() {
 
   const toggleDate = (date) => {
     if (isDateDisabled(date)) return;
-    const key = date.toLocaleDateString('en-CA');
+    const key = getCalendarDateKey(date);
     setSelectedDates(prev => {
-      const exists = prev.find(d => d.toLocaleDateString('en-CA') === key);
-      return exists ? prev.filter(d => d.toLocaleDateString('en-CA') !== key) : [...prev, date];
+      const exists = prev.find(d => getCalendarDateKey(d) === key);
+      return exists ? prev.filter(d => getCalendarDateKey(d) !== key) : [...prev, date];
     });
   };
 
@@ -169,7 +169,7 @@ function Leaves() {
     setSubmitting(true);
     try {
       await api.post("/leaves/request", {
-        selectedDates,
+        selectedDates: selectedDates.map((date) => dateKeyToISTDate(getCalendarDateKey(date))),
         leaveType,
         reason,
         appliedFor,
@@ -419,10 +419,10 @@ function Leaves() {
                   <div className="grid grid-cols-7 gap-1.5">
                     {calendarCells.map((date, i) => {
                       if (!date) return <div key={i} />;
-                      const key = date.toLocaleDateString('en-CA');
-                      const disabled = isDateDisabled(date);
-                      const isSelected = selectedDates.some(d => d.toLocaleDateString('en-CA') === key);
-                      const isToday = date.toLocaleDateString('en-CA') === today.toLocaleDateString('en-CA');
+                       const key = getCalendarDateKey(date);
+                       const disabled = isDateDisabled(date);
+                       const isSelected = selectedDates.some(d => getCalendarDateKey(d) === key);
+                       const isToday = key === getCalendarDateKey(today);
                       
                       // Identify special off-days for coloring
                       const sun = date.getDay() === 0;
@@ -462,7 +462,7 @@ function Leaves() {
 
                 {selectedDates.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 pt-1">
-                    {selectedDates.sort((a, b) => a - b).map(d => (
+                     {[...selectedDates].sort((a, b) => a - b).map(d => (
                       <div key={d.toISOString()} className="px-2.5 py-1 bg-primary-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 animate-in zoom-in duration-300">
                         {formatLeaveDate(d)}
                         <button type="button" onClick={() => toggleDate(d)} className="hover:text-rose-200">✕</button>

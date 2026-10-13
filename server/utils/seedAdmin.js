@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const connectDB = require("../config/db");
 const User = require("../models/User");
+const { isStrongPassword } = require("./validation");
 
 const createAdmin = async () => {
   try {
@@ -17,7 +18,11 @@ const createAdmin = async () => {
       process.exit();
     }
 
-    const hashedPassword = await bcrypt.hash("admin123", 10);
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    if (!isStrongPassword(adminPassword)) {
+      throw new Error("ADMIN_PASSWORD is required and must meet the password policy");
+    }
+    const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
     const admin = new User({
       name: "SJ Creativeworks Admin",

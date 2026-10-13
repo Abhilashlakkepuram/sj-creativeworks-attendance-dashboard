@@ -2,6 +2,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const mongoose = require("mongoose");
 require("dotenv").config();
 
 const connectDB = require("./config/db");
@@ -14,6 +15,10 @@ const notificationRoutes = require("./routes/notificationRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const { initCronJobs } = require("./services/cronService");
+const authenticateSocket = require("./utils/socketAuth");
+const User = require("./models/User");
+const Message = require("./models/Message");
+const Notification = require("./models/Notification");
 
 const app = express();
 const server = http.createServer(app);
@@ -75,7 +80,10 @@ const io = new Server(server, {
   transports: ["websocket", "polling"], // polling fallback for Render
   pingTimeout: 60000,
   pingInterval: 25000,
+  maxHttpBufferSize: 64 * 1024,
 });
+
+io.use(authenticateSocket);
 
 app.set("io", io);
 
@@ -85,89 +93,152 @@ app.set("io", io);
 io.on("connection", (socket) => {
   console.log("🔌 Socket connected:", socket.id);
 
-  socket.on("join", (userData) => {
-    const userId = typeof userData === "string" ? userData : userData?.userId;
-    const role = userData?.role;
-    if (userId) socket.join(`user_${userId}`);
-    if (role) socket.join(`role_${role}`);
+  const emitSocketError = (ack, message) => {
+    const error = { success: false, message };
+    if (typeof ack === "function") ack(error);
+    else socket.emit("socket-error", error);
+  };
+
+  socket.join(`user_${socket.user.id}`);
+  socket.join(`role_${socket.user.role}`);
+  const expiryTimer = Number.isFinite(socket.tokenExpiresAt)
+    ? setTimeout(() => socket.disconnect(true), Math.max(0, socket.tokenExpiresAt - Date.now()))
+    : null;
+  expiryTimer?.unref();
+
+  // Recheck current account state and token validity before every event.
+  socket.use((packet, next) => {
+    const previousRole = socket.user.role;
+    authenticateSocket(socket, (error) => {
+      if (error || socket.user.role !== previousRole) {
+        emitSocketError(packet[packet.length - 1], "Authentication failed; reconnect to continue");
+        socket.disconnect(true);
+        return;
+      }
+      next();
+    });
   });
 
-  socket.on("send-message", async (data) => {
-    const { senderId, receiverId, roleReceiver, message, isGroupMessage, fileUrl, fileType, fileName } = data;
-    const Message = require("./models/Message");
+  socket.on("join", () => {
+    // Room identity is derived from the authenticated socket, never from the
+    // client event payload.
+    socket.join(`user_${socket.user.id}`);
+    socket.join(`role_${socket.user.role}`);
+  });
 
-    const newMessage = await Message.create({
-      sender: senderId,
-      receiver: isGroupMessage ? undefined : receiverId,
-      roleReceiver: isGroupMessage ? roleReceiver : undefined,
-      isGroupMessage: !!isGroupMessage,
-      message,
-      fileUrl,
-      fileType,
-      fileName,
-    });
+  socket.on("send-message", async (data, ack) => {
+    try {
+      if (!data || typeof data !== "object" || Array.isArray(data) ||
+          (data.message !== undefined && typeof data.message !== "string") ||
+          (data.isGroupMessage !== undefined && typeof data.isGroupMessage !== "boolean")) {
+        return emitSocketError(ack, "Invalid message");
+      }
 
-    if (isGroupMessage && roleReceiver) {
-      io.to(`role_${roleReceiver}`).emit("new-message", newMessage);
-      io.to(`user_${senderId}`).emit("new-message", newMessage);
+      const isGroupMessage = data.isGroupMessage === true;
+      const message = typeof data.message === "string" ? data.message.trim() : "";
+      const fileUrl = data.fileUrl;
+      const fileType = data.fileType;
+      const fileName = data.fileName;
+      const allowedFileTypes = new Set([
+        "image/jpeg", "image/png", "application/pdf", "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ]);
 
-      try {
-        const User = require("./models/User");
-        const Notification = require("./models/Notification");
-        const sender = await User.findById(senderId).select("name");
-        const senderName = sender?.name || "A colleague";
-        const targetUsers = await User.find({ role: roleReceiver, _id: { $ne: senderId } }).select("_id");
+      if (!message && !fileUrl) return emitSocketError(ack, "Message or file is required");
+      if (message.length > 4000) return emitSocketError(ack, "Message is too long");
+      if (fileUrl && (typeof fileUrl !== "string" ||
+          !/^\/uploads\/chat\/[A-Za-z0-9._-]+$/.test(fileUrl))) {
+        return emitSocketError(ack, "Invalid file URL");
+      }
+      if (fileUrl && (!allowedFileTypes.has(fileType) ||
+          typeof fileName !== "string" || !fileName || fileName.length > 255 || /[\r\n]/.test(fileName))) {
+        return emitSocketError(ack, "Invalid file metadata");
+      }
 
-        if (targetUsers.length > 0) {
-          const notifications = targetUsers.map((u) => ({
-            user: u._id,
+      let receiverId;
+      let roleReceiver;
+      if (isGroupMessage) {
+        roleReceiver = data.roleReceiver;
+        const validRoles = ["developer", "seo", "designer", "marketing", "admin"];
+        if (!validRoles.includes(roleReceiver) ||
+            (socket.user.role !== "admin" && socket.user.role !== roleReceiver)) {
+          return emitSocketError(ack, "You cannot send to this role");
+        }
+      } else {
+        receiverId = data.receiverId;
+        if (typeof receiverId !== "string" || !mongoose.isObjectIdOrHexString(receiverId) || receiverId === socket.user.id) {
+          return emitSocketError(ack, "Invalid receiver");
+        }
+        const receiver = await User.findOne({
+          _id: receiverId, isApproved: true, isBlocked: false,
+        }).select("_id").lean();
+        if (!receiver) return emitSocketError(ack, "Receiver not found");
+      }
+
+      const newMessage = await Message.create({
+        sender: socket.user.id,
+        receiver: isGroupMessage ? undefined : receiverId,
+        roleReceiver,
+        isGroupMessage,
+        message: message || undefined,
+        fileUrl,
+        fileType,
+        fileName,
+      });
+
+      if (isGroupMessage) {
+        io.to(`role_${roleReceiver}`).emit("new-message", newMessage);
+        if (socket.user.role !== roleReceiver) io.to(`user_${socket.user.id}`).emit("new-message", newMessage);
+        const targetUsers = await User.find({
+          role: roleReceiver, isApproved: true, isBlocked: false, _id: { $ne: socket.user.id },
+        }).select("_id").lean();
+        if (targetUsers.length) {
+          const savedNotifs = await Notification.insertMany(targetUsers.map((user) => ({
+            user: user._id,
             type: "chat",
-            message: `New chat message in #${roleReceiver} from ${senderName}`,
-          }));
-          const savedNotifs = await Notification.insertMany(notifications);
-          savedNotifs.forEach((notif) => {
-            io.to(`user_${notif.user}`).emit("new-notification", notif);
+            message: `New chat message in #${roleReceiver} from ${socket.user.name || "A colleague"}`,
+          })));
+          savedNotifs.forEach((notification) => {
+            io.to(`user_${notification.user}`).emit("new-notification", notification);
           });
         }
-      } catch (err) {
-        console.error("Failed to create role chat notifications:", err);
-      }
-    } else if (receiverId) {
-      io.to(`user_${receiverId}`).emit("new-message", newMessage);
-      io.to(`user_${senderId}`).emit("new-message", newMessage);
-
-      try {
-        const User = require("./models/User");
-        const Notification = require("./models/Notification");
-        const sender = await User.findById(senderId).select("name");
-        const senderName = sender?.name || "A colleague";
-        const newNotification = await Notification.create({
+      } else {
+        io.to(`user_${receiverId}`).emit("new-message", newMessage);
+        io.to(`user_${socket.user.id}`).emit("new-message", newMessage);
+        const notification = await Notification.create({
           user: receiverId,
           type: "chat",
-          message: `New chat message from ${senderName}`,
+          message: `New chat message from ${socket.user.name || "A colleague"}`,
         });
-        io.to(`user_${receiverId}`).emit("new-notification", newNotification);
-      } catch (err) {
-        console.error("Failed to create chat notification:", err);
+        io.to(`user_${receiverId}`).emit("new-notification", notification);
       }
+      if (typeof ack === "function") ack({ success: true, data: newMessage });
+    } catch (err) {
+      console.error("Socket message failed:", err.message);
+      emitSocketError(ack, "Unable to send message");
     }
   });
 
-  socket.on("mark-seen", async (data) => {
-    const { senderId, receiverId } = data;
-    const Message = require("./models/Message");
+  socket.on("mark-seen", async (data, ack) => {
     try {
+      const senderId = data?.senderId;
+      if (typeof senderId !== "string" || !mongoose.isObjectIdOrHexString(senderId) || senderId === socket.user.id) {
+        return emitSocketError(ack, "Invalid sender");
+      }
       await Message.updateMany(
-        { sender: senderId, receiver: receiverId, isSeen: false },
+        { sender: senderId, receiver: socket.user.id, isSeen: false },
         { $set: { isSeen: true } }
       );
-      io.to(`user_${senderId}`).emit("messages-seen", { seenBy: receiverId });
+      io.to(`user_${senderId}`).emit("messages-seen", { seenBy: socket.user.id });
+      if (typeof ack === "function") ack({ success: true });
     } catch (err) {
       console.error("Failed to mark messages as seen:", err);
+      emitSocketError(ack, "Unable to mark messages as seen");
     }
   });
 
   socket.on("disconnect", () => {
+    clearTimeout(expiryTimer);
     console.log("❌ Socket disconnected:", socket.id);
   });
 });
@@ -177,7 +248,7 @@ io.on("connection", (socket) => {
 // ─────────────────────────────────────────────────────
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use("/uploads", express.static("uploads"));
+app.use("/uploads", express.static(require("path").join(__dirname, "uploads")));
 
 // ─────────────────────────────────────────────────────
 // ✅ HEALTH CHECK
@@ -210,8 +281,11 @@ app.use("/api/reports", require("./routes/reportRoutes"));
 // ✅ ERROR HANDLER
 // ─────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
-  console.error("🔥 ERROR:", err.message);
-  res.status(500).json({ message: err.message || "Server Error" });
+  if (res.headersSent) return next(err);
+  if (err.type === "entity.parse.failed") return res.status(400).json({ message: "Invalid JSON" });
+  if (err.type === "entity.too.large") return res.status(413).json({ message: "Request too large" });
+  console.error("Request failed");
+  res.status(500).json({ message: "Server error" });
 });
 
 // ─────────────────────────────────────────────────────

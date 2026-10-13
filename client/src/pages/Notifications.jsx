@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import api from "../services/api";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { formatDistanceToNow } from "date-fns";
+import { getNotificationTarget } from "../utils/notificationLink";
 
 const typeIcons = {
   attendance: "📅",
@@ -163,23 +164,7 @@ function Notifications() {
                 onClick={() => {
                   if (!notif.isRead) markAsRead(notif._id);
                   
-                  let targetLink = notif.link;
-
-                  // Support dynamic role-based path for chat if link is generic or wrong
-                  if (notif.type === "chat") {
-                    targetLink = role === "admin" ? "/admin/chat" : "/employee/chat";
-                  }
-
-                  if (!targetLink) {
-                    targetLink = 
-                      notif.type === "attendance" ? (role === "admin" ? "/admin/attendance" : "/employee/attendance") :
-                      notif.type === "leave" ? (role === "admin" ? "/admin/leaves" : "/employee/leaves") :
-                      notif.type === "registration" ? "/admin/employees" :
-                      notif.type === "announcement" ? (role === "admin" ? "/admin/dashboard" : "/employee/dashboard") :
-                      (role === "admin" ? "/admin/dashboard" : "/employee/dashboard");
-                  }
-                  
-                  if (targetLink) navigate(targetLink);
+                   navigate(getNotificationTarget(notif, role));
                 }}
                 className={`group flex items-start gap-4 p-6 transition-all duration-200 cursor-pointer ${
                   !notif.isRead ? "bg-primary-50/40" : "hover:bg-slate-50/80"

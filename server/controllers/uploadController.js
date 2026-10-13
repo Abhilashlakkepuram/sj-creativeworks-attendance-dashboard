@@ -1,19 +1,31 @@
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
+
+const UPLOAD_DIR = path.join(__dirname, "..", "uploads", "chat");
+const FILE_SIZE_LIMIT = 10 * 1024 * 1024;
+const MIME_EXTENSIONS = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "application/pdf": ".pdf",
+  "application/msword": ".doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+};
 
 // Configure storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = "uploads/chat/";
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    try {
+      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      cb(null, UPLOAD_DIR);
+    } catch {
+      cb(new Error("Upload storage is unavailable"));
     }
-    cb(null, dir);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    const uniqueName = `${Date.now()}-${crypto.randomBytes(16).toString("hex")}`;
+    cb(null, uniqueName + MIME_EXTENSIONS[file.mimetype]);
   },
 });
 
@@ -29,14 +41,14 @@ const fileFilter = (req, file, cb) => {
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error("Invalid file type. Only JPG, PNG, PDF, and DOC are allowed."), false);
+    cb(new Error("Invalid file type. Only JPG, PNG, PDF, DOC, and DOCX are allowed."), false);
   }
 };
 
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: FILE_SIZE_LIMIT, files: 1 },
 });
 
 const uploadFile = (req, res) => {
@@ -55,4 +67,5 @@ const uploadFile = (req, res) => {
 module.exports = {
   upload,
   uploadFile,
+  FILE_SIZE_LIMIT,
 };

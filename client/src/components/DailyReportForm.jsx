@@ -2,8 +2,6 @@ import { useEffect, useState, useCallback } from "react";
 import api from "../services/api";
 import {
   getShiftSlots,
-  isSubmissionAllowed,
-  getTimeUntilUnlock,
   isTodaySubmitted,
   moodEmoji,
 } from "../utils/shiftUtils";

@@ -114,19 +114,6 @@ function EmployeeProfile() {
     return { score, label, color, bg, border };
   }, [stats, leaves]);
 
-  const calculateHours = (inTime, outTime) => {
-    if (!inTime || !outTime) return "—";
-    const diff = new Date(outTime) - new Date(inTime);
-    let minutes = Math.floor(diff / (1000 * 60));
-    // Product-level logic: deduct 1 hour break if they worked more than 4 hours (240 mins)
-    if (minutes > 240) {
-      minutes -= 60;
-    }
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return `${h}h ${m}m`;
-  };
-
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     try {

@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../../config/axiosConfig";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
-import logo from "../../assets/sj-logo.png";
+import logo from "../../assets/visionthoughts.logo.jpeg";
 
 const ResetPassword = () => {
     const navigate = useNavigate();
@@ -56,8 +56,8 @@ const ResetPassword = () => {
                 <div className="absolute bottom-[-10%] left-[20%] w-96 h-96 bg-primary-400 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000"></div>
 
                 <div className="relative z-10 text-center w-full max-w-lg">
-                    <div className="w-24 h-24 bg-white/10 backdrop-blur-lg rounded-2xl flex items-center justify-center mx-auto mb-8 border border-white/20 shadow-xl shadow-primary-500/20 p-2 overflow-hidden">
-                        <img src={logo} alt="SJ Creativeworks Logo" className="w-full h-full object-contain drop-shadow-md" />
+                    <div className="w-24 h-24 bg-white rounded-2xl flex items-center justify-center mx-auto mb-8 border border-white/20 shadow-xl shadow-primary-500/20 p-2 overflow-hidden">
+                        <img src={logo} alt="Vision Thoughts" className="w-full h-full object-contain drop-shadow-md" />
                     </div>
                     <h1 className="text-5xl font-extrabold tracking-tight mb-6">Create New Password</h1>
                     <p className="text-lg text-primary-100 mb-10 leading-relaxed">
@@ -70,7 +70,7 @@ const ResetPassword = () => {
                 <div className="w-full max-w-md">
                     <div className="lg:hidden flex justify-center mb-6">
                         <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-primary-600/20 p-2 border border-slate-100">
-                            <img src={logo} alt="SJ Logo" className="w-full h-full object-contain" />
+                            <img src={logo} alt="Vision Thoughts" className="w-full h-full object-contain" />
                         </div>
                     </div>
 
@@ -101,7 +101,7 @@ const ResetPassword = () => {
                             label="Email Address"
                             type="email"
                             name="email"
-                            placeholder="you@creativeworks.com"
+                            placeholder="you@visionthoughts.com"
                             onChange={handleChange}
                             value={formData.email}
                             required

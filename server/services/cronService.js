@@ -4,7 +4,7 @@ const Notification = require("../models/Notification");
 const LeaveBalance = require("../models/LeaveBalance");
 const User = require("../models/User");
 const { calculateWorkingHours } = require("../utils/attendanceHelpers");
-const { getTodayRange, TIMEZONE } = require("../utils/timeHelper");
+const { getTodayRange, getISTYMD, TIMEZONE } = require("../utils/timeHelper");
 
 const initAutoPunchOutCron = (io) => {
 
@@ -93,33 +93,29 @@ const initMonthlyLeaveCreditCron = () => {
     console.log("[CRON] Running monthly leave credit...");
     try {
       const users = await User.find({ isApproved: true });
-      const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+      const currentMonth = getISTYMD(new Date()).slice(0, 7);
 
       for (let user of users) {
-        let balanceRecord = await LeaveBalance.findOne({ user: user._id });
-
-        if (!balanceRecord) {
-          // Initialize if missing
-          await LeaveBalance.create({
-            user: user._id,
-            balance: 2,
-            lastCreditedMonth: currentMonth
-          });
-          continue;
+        try {
+          await LeaveBalance.updateOne({ user: user._id }, {
+            $setOnInsert: { balance: 2, lastCreditedMonth: currentMonth }
+          }, { upsert: true });
+        } catch (error) {
+          if (error.code !== 11000) throw error;
         }
-
-        // Prevent double credit
-        if (balanceRecord.lastCreditedMonth === currentMonth) continue;
-
-        // Credit +2, capped at maxLimit (default 6)
-        const newBalance = Math.min(
-          balanceRecord.balance + balanceRecord.monthlyCredit,
-          balanceRecord.maxLimit
+        // Compute from the current balance atomically; saving a stale balance
+        // here could overwrite a simultaneous leave approval debit.
+        await LeaveBalance.updateOne(
+          { user: user._id, lastCreditedMonth: { $ne: currentMonth } },
+          [{ $set: {
+            balance: { $min: [
+              { $add: ["$balance", { $ifNull: ["$monthlyCredit", 2] }] },
+              { $ifNull: ["$maxLimit", 6] }
+            ] },
+            lastCreditedMonth: currentMonth
+          } }],
+          { updatePipeline: true }
         );
-
-        balanceRecord.balance = newBalance;
-        balanceRecord.lastCreditedMonth = currentMonth;
-        await balanceRecord.save();
       }
       console.log(`[CRON] Monthly leave credit completed for ${users.length} users.`);
     } catch (error) {

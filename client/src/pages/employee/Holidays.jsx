@@ -1,11 +1,12 @@
 import { useState, useEffect, useContext } from "react";
 import Calendar from "react-calendar";
 import "react-calendar/dist/Calendar.css";
-import { isSaturday, isSunday, getDay, isSameDay } from "date-fns";
+import { isSaturday, isSunday } from "date-fns";
 
 import api from "../../services/api";
 import { SocketContext } from "../../socket/SocketContext";
 import Badge from "../../components/ui/Badge";
+import { dateKeyToISTDate, getCalendarDateKey, getISTDateKey, getTodayCalendarDate } from "../../utils/timezone";
 
 function Holidays() {
   const socket = useContext(SocketContext);
@@ -42,9 +43,7 @@ function Holidays() {
 
   // ✅ Calendar Styling Logic
   const getTileClass = ({ date }) => {
-    const isHoliday = holidays.some((h) =>
-      isSameDay(new Date(h.date), date)
-    );
+    const isHoliday = holidays.some((h) => getISTDateKey(h.date) === getCalendarDateKey(date));
 
     // Weekends marking logic
     if (isSunday(date)) {
@@ -68,11 +67,10 @@ function Holidays() {
 
   // ✅ Click Date
   const handleDateClick = (date) => {
-    const isHoliday = holidays.some((h) => isSameDay(new Date(h.date), date));
+    const isHoliday = holidays.some((h) => getISTDateKey(h.date) === getCalendarDateKey(date));
 
     // Disable clicks on existing holidays or sundays or past dates
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getTodayCalendarDate();
 
     if (isHoliday || isSunday(date) || date < today) return;
 
@@ -90,8 +88,8 @@ function Holidays() {
     setSubmitting(true);
     try {
       await api.post("/leaves/request", {
-        startDate: selectedDate,
-        endDate: selectedDate,
+        startDate: dateKeyToISTDate(getCalendarDateKey(selectedDate)),
+        endDate: dateKeyToISTDate(getCalendarDateKey(selectedDate)),
         reason,
       });
 

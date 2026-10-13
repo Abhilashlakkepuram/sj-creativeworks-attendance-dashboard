@@ -3,6 +3,8 @@
  * Shift: 10:00 AM – 7:00 PM | Lunch: 1:00–2:00 PM (not billable)
  */
 
+import { getISTDateKey, getTodayISTDateKey } from "./timezone";
+
 export const SHIFT_SLOTS = [
   "10:00 – 11:00",
   "11:00 – 12:00",
@@ -34,12 +36,12 @@ export function getTimeUntilUnlock() {
 }
 
 /**
- * Returns true if report exists and its date matches today's local date.
+ * Returns true if report exists and its date matches today's IST date.
  */
 export function isTodaySubmitted(report) {
   if (!report) return false;
-  const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
-  const reportStr = new Date(report.date).toLocaleDateString("en-CA");
+  const todayStr = getTodayISTDateKey();
+  const reportStr = getISTDateKey(report.date);
   return todayStr === reportStr;
 }
 

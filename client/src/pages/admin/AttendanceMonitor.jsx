@@ -1,22 +1,22 @@
-import { useEffect, useState, useContext } from "react";
+import { useCallback, useEffect, useState, useContext } from "react";
 import api from "../../services/api";
 import { SocketContext } from "../../socket/SocketContext";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { formatISTDateKey, getISTDateKey, getTodayISTDateKey } from "../../utils/timezone";
+import { useSearchParams } from "react-router-dom";
 
 const STATUS = ["all", "present", "late", "half-day", "absent", "missed"];
 
-const getISTYMD = (date) => {
-  // Use Intl to get date parts in Asia/Kolkata
-  const options = { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" };
-  const formatter = new Intl.DateTimeFormat("en-CA", options); 
-  return formatter.format(new Date(date)); // returns YYYY-MM-DD
-};
+const getISTYMD = getISTDateKey;
+const normalizeStatus = (value) => STATUS.includes(value) ? value : "all";
 
 function AttendanceMonitor() {
   const socket = useContext(SocketContext);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState([]);
-  const [status, setStatus] = useState("all");
+  const queryStatus = normalizeStatus(searchParams.get("filter"));
+  const [status, setStatus] = useState(queryStatus);
   const [search, setSearch] = useState("");
   const [date, setDate] = useState("");
   const [loading, setLoading] = useState(true);
@@ -36,7 +36,7 @@ function AttendanceMonitor() {
     return `${h}h ${m}m`;
   };
 
-  const fetchAttendance = async () => {
+  const fetchAttendance = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -49,13 +49,11 @@ function AttendanceMonitor() {
 
       const res = await api.get(`/admin/attendance?${params}`);
       const payloadData = res.data.data || [];
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
+       const today = getTodayISTDateKey();
 
-      const enrichedData = payloadData.map(d => {
-        const recordDate = new Date(d.date || d.punchIn || d.createdAt);
-        recordDate.setHours(0, 0, 0, 0);
-        if (d.punchIn && !d.punchOut && recordDate < startOfToday) {
+       const enrichedData = payloadData.map(d => {
+         const recordDate = getISTYMD(d.date || d.punchIn || d.createdAt);
+         if (d.punchIn && !d.punchOut && recordDate < today) {
           return { ...d, missedPunchOut: true };
         }
         return d;
@@ -75,7 +73,11 @@ function AttendanceMonitor() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [date, search, status]);
+
+  useEffect(() => {
+    setStatus(queryStatus);
+  }, [queryStatus]);
 
   useEffect(() => {
     fetchAttendance();
@@ -84,7 +86,7 @@ function AttendanceMonitor() {
       socket.on("attendance-update", fetchAttendance);
       return () => socket.off("attendance-update", fetchAttendance);
     }
-  }, [status, search, date, socket]);
+  }, [fetchAttendance, socket]);
 
   const groupAttendanceByDate = (attendanceData) => {
     return attendanceData.reduce((groups, record) => {
@@ -107,19 +109,12 @@ function AttendanceMonitor() {
     const now = new Date();
     const today = getISTYMD(now);
 
-    const yestDate = new Date(now);
-    yestDate.setDate(yestDate.getDate() - 1);
-    const yesterday = getISTYMD(yestDate);
+    const yesterday = getISTYMD(new Date(Date.now() - 24 * 60 * 60 * 1000));
 
     if (dateStr === today) return 'Today';
     if (dateStr === yesterday) return 'Yesterday';
 
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      timeZone: 'Asia/Kolkata'
-    });
+    return formatISTDateKey(dateStr, { month: "short", day: "numeric", year: "numeric" });
   };
 
   const toggleDate = (dateKey) => {
@@ -134,7 +129,7 @@ function AttendanceMonitor() {
 
     const doc = new jsPDF();
     doc.setFontSize(18);
-    doc.text("Global Attendance Report", 14, 22);
+     doc.text("Vision Thoughts Attendance Report", 14, 22);
     doc.setFontSize(11);
     doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
     doc.text(`Filters: Status: ${status}, Search: ${search || 'None'}, Date: ${date || 'All'}`, 14, 38);
@@ -157,7 +152,7 @@ function AttendanceMonitor() {
       headStyles: { fillColor: [79, 70, 229] }
     });
 
-    doc.save(`attendance_monitor_${getISTYMD(new Date())}.pdf`);
+     doc.save(`vision-thoughts-attendance_${getISTYMD(new Date())}.pdf`);
   };
 
   const groupedData = groupAttendanceByDate(data);
@@ -187,10 +182,16 @@ function AttendanceMonitor() {
       {/* Filters */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-wrap items-center gap-4">
         <div className="flex bg-slate-100 p-1 rounded-xl">
-          {STATUS.map((s) => (
-            <button
-              key={s}
-              onClick={() => setStatus(s)}
+           {STATUS.map((s) => (
+             <button
+               key={s}
+               onClick={() => {
+                 setStatus(s);
+                 const nextParams = new URLSearchParams(searchParams);
+                 if (s === "all") nextParams.delete("filter");
+                 else nextParams.set("filter", s);
+                 setSearchParams(nextParams, { replace: true });
+               }}
               className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${status === s
                 ? "bg-white text-indigo-600 shadow-sm"
                 : "text-slate-500 hover:text-slate-700"

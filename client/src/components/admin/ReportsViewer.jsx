@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import api from "../../services/api";
 import { moodEmoji } from "../../utils/shiftUtils";
+import { getISTDateKey } from "../../utils/timezone";
 
 const STATUS_OPTIONS = ["all", "pending", "approved", "flagged"];
 
@@ -13,7 +14,7 @@ const STATUS_STYLE = {
 const SLOTS_BEFORE_LUNCH = 3; // slot indexes 0-2
 
 // ── helper ──────────────────────────────────────────────────────────────────
-const todayISO = () => new Date().toLocaleDateString("en-CA");
+const todayISO = () => getISTDateKey(new Date());
 
 function initials(name = "") {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -243,7 +244,7 @@ export default function ReportsViewer() {
     const rows = [];
     reports.forEach((r) => {
       const name = r.employeeId?.name || r.employeeName || "";
-      const d = new Date(r.date).toLocaleDateString("en-CA");
+       const d = getISTDateKey(r.date);
       const isLeave = r.isLeave ? "Yes" : "No";
       
       if (r.hours && r.hours.length > 0) {
@@ -269,7 +270,7 @@ export default function ReportsViewer() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `reports_${date || todayISO()}.csv`;
+     a.download = `vision-thoughts-reports_${date || todayISO()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };

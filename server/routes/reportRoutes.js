@@ -4,6 +4,7 @@ const DailyReport = require("../models/DailyReport");
 const User = require("../models/User");
 const verifyToken = require("../middleware/authMiddleware");
 const isAdmin = require("../middleware/adminMiddleware");
+const { getTodayRange, getISTDayRangeFromYMD } = require("../utils/timeHelper");
 
 const SLOTS = [
   "10:00 – 11:00",
@@ -25,11 +26,7 @@ router.post("/", verifyToken, async (req, res) => {
     const userId = req.user.id;
     const { hours, overallNotes, moodRating, isLeave } = req.body;
 
-    // Today's date boundary (date only, no time)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(today);
-    todayEnd.setHours(23, 59, 59, 999);
+    const { start: today, end: todayEnd } = getTodayRange(now);
 
     // ❌ Prevent duplicate
     const existing = await DailyReport.findOne({
@@ -64,7 +61,7 @@ router.post("/", verifyToken, async (req, res) => {
     if (err.code === 11000) {
       return res.status(400).json({ message: "You have already submitted today's report" });
     }
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -74,10 +71,7 @@ router.post("/", verifyToken, async (req, res) => {
 router.get("/today", verifyToken, async (req, res) => {
   console.log(`📥 GET /api/reports/today from user: ${req.user.id}`);
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(today);
-    todayEnd.setHours(23, 59, 59, 999);
+    const { start: today, end: todayEnd } = getTodayRange();
 
     const report = await DailyReport.findOne({
       employeeId: req.user.id,
@@ -86,7 +80,7 @@ router.get("/today", verifyToken, async (req, res) => {
 
     res.json(report || null);
   } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -101,11 +95,9 @@ router.get("/", verifyToken, isAdmin, async (req, res) => {
     if (employeeId) filter.employeeId = employeeId;
     if (status && status !== "all") filter.status = status;
     if (date) {
-      const d = new Date(date);
-      d.setHours(0, 0, 0, 0);
-      const dEnd = new Date(d);
-      dEnd.setHours(23, 59, 59, 999);
-      filter.date = { $gte: d, $lte: dEnd };
+      const range = getISTDayRangeFromYMD(date);
+      if (!range) return res.status(400).json({ message: "Date must be a valid YYYY-MM-DD value" });
+      filter.date = { $gte: range.start, $lte: range.end };
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -124,7 +116,7 @@ router.get("/", verifyToken, isAdmin, async (req, res) => {
       totalPages: Math.ceil(total / Number(limit))
     });
   } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -138,7 +130,7 @@ router.get("/:id", verifyToken, isAdmin, async (req, res) => {
     if (!report) return res.status(404).json({ message: "Report not found" });
     res.json(report);
   } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ message: "Server error" });
   }
 });
 

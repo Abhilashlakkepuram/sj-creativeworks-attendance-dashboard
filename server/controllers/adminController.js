@@ -6,14 +6,33 @@ const bcrypt = require("bcryptjs");
 const { getPagination, formatPagination } = require("../utils/pagination");
 const { calculateWorkingHours } = require("../utils/attendanceHelpers");
 const {
+    EMPLOYEE_ROLES,
+    PASSWORD_MESSAGE,
+    isStrongPassword,
+    isValidEmail,
+    normalizeEmail,
+} = require("../utils/validation");
+const {
     getTodayRange,
     toUTC,
     getISTDateParts,
     getISTYMD,
+    getISTDayRangeFromYMD,
     isOfficeHoliday,
     isPublicHoliday,
     isBeforeJoining
 } = require("../utils/timeHelper");
+
+const normalizeJoiningDate = (value) => {
+    if (typeof value !== "string") return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return getISTDayRangeFromYMD(value)?.start || null;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value) ||
+        !getISTDayRangeFromYMD(value.slice(0, 10))) return null;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
 
 
 // (Replacing getTodayRangeHelper with standardized version from timeHelper)
@@ -86,14 +105,17 @@ const getUserAttendance = async (req, res) => {
 
         if (month) {
             const [year, m] = month.split("-").map(Number);
+            if (!/^\d{4}-\d{2}$/.test(month) || !Number.isInteger(year) || m < 1 || m > 12) {
+                return res.status(400).json({ message: "Month must be YYYY-MM" });
+            }
             rangeStart = toUTC(year, m, 1, 0, 0, 0);
-            const lastDay = new Date(year, m, 0).getDate();
-            rangeEnd = toUTC(year, m, lastDay, 0, 0, 0);
+            const nextMonth = m === 12 ? { year: year + 1, month: 1 } : { year, month: m + 1 };
+            rangeEnd = new Date(toUTC(nextMonth.year, nextMonth.month, 1, 0, 0, 0).getTime() - 1);
 
-            if (rangeEnd > today) rangeEnd = today;
+            if (rangeEnd > todayRange.end) rangeEnd = todayRange.end;
         } else {
             // Default: 30 days ago to today
-            rangeEnd = today;
+            rangeEnd = todayRange.end;
             rangeStart = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 
             // But don't go before join date
@@ -126,7 +148,7 @@ const getUserAttendance = async (req, res) => {
 
         // Build complete day-by-day list
         const allDays = [];
-        let cursor = new Date(rangeEnd);
+        let cursor = getTodayRange(rangeEnd).start;
 
         while (cursor >= rangeStart) {
             const key = getISTYMD(cursor);
@@ -203,7 +225,7 @@ const getUserAttendance = async (req, res) => {
         });
 
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        res.status(500).json({ message: "Server error" });
     }
 };
 
@@ -219,7 +241,12 @@ const getEmployees = async (req, res) => {
 
         let match = { role: { $ne: "admin" } };
 
-        if (role && role !== "all") match.role = role;
+        if (role && role !== "all") {
+            if (!EMPLOYEE_ROLES.includes(role)) {
+                return res.status(400).json({ message: "Invalid employee role" });
+            }
+            match.role = role;
+        }
 
         if (search) {
             match.$or = [
@@ -276,7 +303,8 @@ const getEmployees = async (req, res) => {
                 }
             },
             {
-                $unset: ["password", "attendance", "todayRecord"]
+                $unset: ["password", "attendance", "todayRecord", "resetOTP", "resetOTPExpires",
+                    "resetAttempts", "resetOTPLastSent", "resetOTPWindowStart", "resetOTPSendCount"]
             },
             { $skip: skip },
             { $limit: limitNum }
@@ -294,40 +322,96 @@ const getEmployees = async (req, res) => {
 
     } catch (error) {
         console.error("ERROR IN getEmployees:", error);
-        res.status(500).json({ message: error.message, stack: error.stack });
+        res.status(500).json({ message: "Server error" });
     }
 };
 
 const addEmployee = async (req, res) => {
     try {
-        const { name, email, password, role, joiningDate } = req.body;
+        const { name, password, role, joiningDate } = req.body || {};
+        const email = normalizeEmail(req.body?.email);
+        if (typeof name !== "string" || !name.trim() || name.trim().length > 100 ||
+            !isValidEmail(email)) {
+            return res.status(400).json({ message: "A valid name and email are required" });
+        }
+        if (!EMPLOYEE_ROLES.includes(role)) {
+            return res.status(400).json({ message: "Invalid employee role" });
+        }
+        if (!isStrongPassword(password)) {
+            return res.status(400).json({ message: PASSWORD_MESSAGE });
+        }
+        const normalizedJoiningDate = joiningDate === undefined
+            ? getTodayRange().start
+            : normalizeJoiningDate(joiningDate);
+        if (joiningDate !== undefined && !normalizedJoiningDate) {
+            return res.status(400).json({ message: "Joining date must be a valid YYYY-MM-DD value" });
+        }
         const existingUser = await User.findOne({ email });
         if (existingUser) return res.status(400).json({ message: "User already exists" });
         const hashedPassword = await bcrypt.hash(password, 10);
         const user = new User({
-            name,
+            name: name.trim(),
             email,
             password: hashedPassword,
             role,
-            joiningDate: joiningDate || new Date(),
+            joiningDate: normalizedJoiningDate,
             isApproved: true
         });
         await user.save();
         req.app.get("io").emit("dashboard-update");
         res.status(201).json({ message: "Employee added successfully" });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        if (error.code === 11000) return res.status(400).json({ message: "User already exists" });
+        res.status(500).json({ message: "Server error" });
     }
 };
 
 const updateEmployee = async (req, res) => {
     try {
-        const { name, email, role, joiningDate } = req.body;
-        await User.findByIdAndUpdate(req.params.id, { name, email, role, joiningDate });
+        if (!mongoose.isObjectIdOrHexString(req.params.id)) {
+            return res.status(400).json({ message: "Invalid employee ID" });
+        }
+        const body = req.body || {};
+        const updates = {};
+        if (Object.hasOwn(body, "name")) {
+            if (typeof body.name !== "string" || !body.name.trim() || body.name.trim().length > 100) {
+                return res.status(400).json({ message: "A valid name is required" });
+            }
+            updates.name = body.name.trim();
+        }
+        if (Object.hasOwn(body, "email")) {
+            updates.email = normalizeEmail(body.email);
+            if (!isValidEmail(updates.email)) return res.status(400).json({ message: "A valid email is required" });
+            const duplicate = await User.findOne({ email: updates.email, _id: { $ne: req.params.id } }).select("_id").lean();
+            if (duplicate) return res.status(400).json({ message: "Email already in use" });
+        }
+        if (Object.hasOwn(body, "role")) {
+            if (!EMPLOYEE_ROLES.includes(body.role)) return res.status(400).json({ message: "Invalid employee role" });
+            updates.role = body.role;
+        }
+        if (Object.hasOwn(body, "joiningDate")) {
+            updates.joiningDate = normalizeJoiningDate(body.joiningDate);
+            if (!updates.joiningDate) return res.status(400).json({ message: "Invalid joining date" });
+        }
+        if (!Object.keys(updates).length) return res.status(400).json({ message: "No employee fields provided" });
+        const updated = await User.findOneAndUpdate(
+            { _id: req.params.id, role: { $ne: "admin" } },
+            { $set: updates },
+            { new: true, runValidators: true }
+        );
+        if (!updated) return res.status(404).json({ message: "Employee not found" });
+        if (updates.role) {
+            for (const socket of req.app.get("io")?.sockets.sockets.values() || []) {
+                if (socket.user?.id === updated._id.toString() && socket.user.role !== updated.role) {
+                    socket.disconnect(true);
+                }
+            }
+        }
         req.app.get("io").emit("dashboard-update");
         res.json({ message: "Employee updated successfully" });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        if (error.code === 11000) return res.status(400).json({ message: "Email already in use" });
+        res.status(500).json({ message: "Server error" });
     }
 };
 
@@ -337,7 +421,7 @@ const deleteEmployee = async (req, res) => {
         req.app.get("io").emit("dashboard-update");
         res.json({ message: "Employee deleted successfully" });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        res.status(500).json({ message: "Server error" });
     }
 };
 
@@ -347,10 +431,16 @@ const toggleBlockUser = async (req, res) => {
         if (!user) return res.status(404).json({ message: "User not found" });
         user.isBlocked = !user.isBlocked;
         await user.save();
-        req.app.get("io").emit("dashboard-update");
+        const io = req.app.get("io");
+        if (user.isBlocked && io) {
+            for (const socket of io.sockets.sockets.values()) {
+                if (socket.user?.id === user._id.toString()) socket.disconnect(true);
+            }
+        }
+        io?.emit("dashboard-update");
         res.json({ message: `User ${user.isBlocked ? "blocked" : "unblocked"} successfully` });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        res.status(500).json({ message: "Server error" });
     }
 };
 
@@ -360,7 +450,7 @@ const getEmployeeProfile = async (req, res) => {
         if (!user) return res.status(404).json({ message: "Employee not found" });
         res.json(user);
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        res.status(500).json({ message: "Server error" });
     }
 };
 
@@ -369,7 +459,7 @@ const getPendingUsers = async (req, res) => {
         const users = await User.find({ isApproved: false, role: { $ne: "admin" } }).select("-password");
         res.json(users);
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        res.status(500).json({ message: "Server error" });
     }
 };
 
@@ -384,7 +474,7 @@ const approveUser = async (req, res) => {
         req.app.get("io").emit("dashboard-update");
         res.json({ message: "User approved successfully" });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        res.status(500).json({ message: "Server error" });
     }
 };
 
@@ -397,7 +487,7 @@ const rejectUser = async (req, res) => {
         req.app.get("io").emit("dashboard-update");
         res.json({ message: "User request rejected and removed" });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        res.status(500).json({ message: "Server error" });
     }
 };
 
@@ -476,7 +566,7 @@ const getAllAttendance = async (req, res) => {
                 ...userFilter,
                 role: { $ne: "admin" },
                 isApproved: true
-            }).select("name email role createdAt").lean();
+            }).select("name email role createdAt joiningDate").lean();
 
             // We need to check who was actually present (regardless of filter) to calculate true absences
             const allRangeAttendances = await Attendance.find({
@@ -536,20 +626,20 @@ const getAllAttendance = async (req, res) => {
         res.json({ success: true, data: paginated, total, page: Number(page), totalPages: Math.ceil(total / parsedLimit) });
 
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        res.status(500).json({ message: "Server error" });
     }
 };
 
 const getDashboardStats = async (req, res) => {
     try {
         const totalEmployees = await User.countDocuments({ role: { $ne: "admin" } });
-        const today = getTodayRange().start;
-        const todayAttendance = await Attendance.countDocuments({ date: today });
-        const lateEmployees = await Attendance.countDocuments({ date: today, isLate: true });
+        const { start, end } = getTodayRange();
+        const todayAttendance = await Attendance.countDocuments({ date: { $gte: start, $lte: end } });
+        const lateEmployees = await Attendance.countDocuments({ date: { $gte: start, $lte: end }, isLate: true });
         res.json({ totalEmployees, todayAttendance, lateEmployees });
 
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        res.status(500).json({ message: "Server error" });
     }
 };
 

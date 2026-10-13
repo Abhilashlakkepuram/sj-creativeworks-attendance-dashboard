@@ -86,7 +86,7 @@ const punchIn = async (req, res) => {
         res.json({ message: "Punch in successful", attendance });
 
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        res.status(500).json({ message: "Server error" });
     }
 };
 
@@ -156,7 +156,7 @@ const punchOut = async (req, res) => {
         res.json({ message: "Punch out successful", attendance });
 
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        res.status(500).json({ message: "Server error" });
     }
 };
 
@@ -201,7 +201,7 @@ const getMyAttendance = async (req, res) => {
             const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 
             // Start from joint date at IST midnight, but no earlier than 30 days ago
-            const joinDate = new Date(user.createdAt);
+            const joinDate = new Date(user.joiningDate || user.createdAt);
             const effectiveStart = joinDate < thirtyDaysAgo ? thirtyDaysAgo : joinDate;
 
             const joinParts = getISTDateParts(effectiveStart);
@@ -266,7 +266,7 @@ const getMyAttendance = async (req, res) => {
         res.json(attendance);
 
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        res.status(500).json({ message: "Server error" });
     }
 };
 
@@ -288,7 +288,7 @@ const getTodayStatus = async (req, res) => {
         res.json(attendance);
 
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        res.status(500).json({ message: "Server error" });
     }
 };
 

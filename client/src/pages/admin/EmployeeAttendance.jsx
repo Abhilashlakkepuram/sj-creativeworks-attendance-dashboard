@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import autoTable from "jspdf-autotable";
+import { getISTMonthKey } from "../../utils/timezone";
 
 function EmployeeAttendance() {
     const { id } = useParams();
@@ -12,11 +13,11 @@ function EmployeeAttendance() {
     const [data, setData] = useState([]);
     const [employee, setEmployee] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+    const [month, setMonth] = useState(getISTMonthKey(new Date()));
     const [summary, setSummary] = useState(null);
 
     // ───────────────── FETCH DATA ─────────────────
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         try {
             setLoading(true);
 
@@ -34,7 +35,7 @@ function EmployeeAttendance() {
                 try {
                     const empRes = await api.get(`/admin/employee/${id}`);
                     setEmployee(empRes.data);
-                } catch (profileErr) {
+                } catch {
                     // Final fallback to populated record if available
                     if (attendanceData.length > 0 && attendanceData[0].user?.name) {
                         setEmployee(attendanceData[0].user);
@@ -47,11 +48,11 @@ function EmployeeAttendance() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [id, month]);
 
     useEffect(() => {
         fetchData();
-    }, [id, month]);
+    }, [fetchData]);
 
     // ───────────────── CALCULATE HOURS ─────────────────
     const calculateHours = (inTime, outTime) => {
@@ -78,7 +79,7 @@ function EmployeeAttendance() {
 
         // Header
         doc.setFontSize(18);
-        doc.text("SJ Creativeworks", 14, 18);
+        doc.text("Vision Thoughts", 14, 18);
 
         doc.setFontSize(12);
         doc.text("Employee Attendance Report", 14, 26);
@@ -116,7 +117,7 @@ function EmployeeAttendance() {
             theme: "grid",
         });
 
-        doc.save(`attendance_${employee?.name || "employee"}.pdf`);
+        doc.save(`vision-thoughts-attendance_${employee?.name || "employee"}.pdf`);
     };
 
     // ───────────────── UI ─────────────────

@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import api from "../../services/api";
 import Card, { CardContent, CardHeader, CardTitle } from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import { useSocket } from "../../socket/SocketContext";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { getLocation } from "../../utils/getLocation";
 
 function Dashboard() {
@@ -12,12 +12,45 @@ function Dashboard() {
   const socket = useSocket();
 
   const [status, setStatus] = useState("Not punched in");
-  const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(false);
   const [todayAttendance, setTodayAttendance] = useState(null);
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
   const [announcements, setAnnouncements] = useState([]);
   const [announcementsLoading, setAnnouncementsLoading] = useState(false);
+
+  const fetchAnnouncements = useCallback(async () => {
+    try {
+      setAnnouncementsLoading(true);
+      const res = await api.get("/announcements");
+      // Filter for this user's role or 'all'
+      const filtered = res.data.filter(a => a.targetRole === "all" || a.targetRole === user.role);
+      setAnnouncements(filtered.slice(0, 5)); // Only show top 5 on dashboard
+    } catch (err) {
+      console.error("Failed to fetch announcements:", err);
+    } finally {
+      setAnnouncementsLoading(false);
+    }
+  }, [user?.role]);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await api.get("/attendance/today-status");
+
+      if (res.data.punchIn && !res.data.punchOut) {
+        setStatus("Punched In");
+        setTodayAttendance(res.data);
+      } else if (res.data.punchOut) {
+        setStatus("Completed");
+        setTodayAttendance(res.data);
+      } else {
+        setStatus("Not punched in");
+        setTodayAttendance(null);
+      }
+    } catch {
+      setStatus("Not punched in");
+      setTodayAttendance(null);
+    }
+  }, []);
 
   // 🔔 Socket
   useEffect(() => {
@@ -42,57 +75,13 @@ function Dashboard() {
       socket.off("new-announcement");
       socket.off("announcement-deleted");
     };
-  }, [socket]);
+  }, [socket, user?.role]);
 
   // 📊 Fetch Data
   useEffect(() => {
     fetchStatus();
-    fetchAttendance();
     fetchAnnouncements();
-  }, [user?.role]);
-
-  const fetchAnnouncements = async () => {
-    try {
-      setAnnouncementsLoading(true);
-      const res = await api.get("/announcements");
-      // Filter for this user's role or 'all'
-      const filtered = res.data.filter(a => a.targetRole === "all" || a.targetRole === user.role);
-      setAnnouncements(filtered.slice(0, 5)); // Only show top 5 on dashboard
-    } catch (err) {
-      console.error("Failed to fetch announcements:", err);
-    } finally {
-      setAnnouncementsLoading(false);
-    }
-  };
-
-  const fetchStatus = async () => {
-    try {
-      const res = await api.get("/attendance/today-status");
-
-      if (res.data.punchIn && !res.data.punchOut) {
-        setStatus("Punched In");
-        setTodayAttendance(res.data);
-      } else if (res.data.punchOut) {
-        setStatus("Completed");
-        setTodayAttendance(res.data);
-      } else {
-        setStatus("Not punched in");
-        setTodayAttendance(null);
-      }
-    } catch {
-      setStatus("Not punched in");
-      setTodayAttendance(null);
-    }
-  };
-
-  const fetchAttendance = async () => {
-    try {
-      const res = await api.get("/attendance/my-attendance");
-      setAttendance(res.data);
-    } catch (error) {
-      console.log(error);
-    }
-  };
+  }, [fetchAnnouncements, fetchStatus, user?.role]);
 
   // ⏱️ Live Timer
   useEffect(() => {
@@ -146,7 +135,6 @@ function Dashboard() {
 
       alert(res.data.message);
       fetchStatus();
-      fetchAttendance();
     } catch (error) {
       alert(error.response?.data?.message || error.message);
     } finally {
@@ -165,7 +153,6 @@ function Dashboard() {
 
       alert(res.data.message);
       fetchStatus();
-      fetchAttendance();
     } catch (error) {
       alert(error.response?.data?.message || error.message);
     } finally {
