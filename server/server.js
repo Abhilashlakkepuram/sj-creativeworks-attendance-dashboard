@@ -34,9 +34,11 @@ const allowedOrigins = [
   "http://localhost:5176",
   "http://127.0.0.1:5173",
   "http://127.0.0.1:5174",
-  // ✅ Production Vercel URLs (both domains)
+  // ✅ Production Vercel URLs
   "https://sj-creative-works-dashboard.vercel.app",
   "https://sj-creative-works-dashboard-px0m1z7qc-sjcreativeworks.vercel.app",
+  // ✅ Custom domain
+  "https://dashboard.visionthoughts.com",
   // ✅ From .env (future custom domain support)
   process.env.CLIENT_URL,
 ].filter(Boolean);
@@ -47,6 +49,7 @@ const isOriginAllowed = (origin) => {
   if (origin.endsWith(".vercel.app")) return true; // all Vercel preview URLs
   return false;
 };
+
 
 // ─────────────────────────────────────────────────────
 // ✅ CORS
@@ -129,8 +132,8 @@ io.on("connection", (socket) => {
   socket.on("send-message", async (data, ack) => {
     try {
       if (!data || typeof data !== "object" || Array.isArray(data) ||
-          (data.message !== undefined && typeof data.message !== "string") ||
-          (data.isGroupMessage !== undefined && typeof data.isGroupMessage !== "boolean")) {
+        (data.message !== undefined && typeof data.message !== "string") ||
+        (data.isGroupMessage !== undefined && typeof data.isGroupMessage !== "boolean")) {
         return emitSocketError(ack, "Invalid message");
       }
 
@@ -147,11 +150,11 @@ io.on("connection", (socket) => {
       if (!message && !fileUrl) return emitSocketError(ack, "Message or file is required");
       if (message.length > 4000) return emitSocketError(ack, "Message is too long");
       if (fileUrl && (typeof fileUrl !== "string" ||
-          !/^\/uploads\/chat\/[A-Za-z0-9._-]+$/.test(fileUrl))) {
+        !/^\/uploads\/chat\/[A-Za-z0-9._-]+$/.test(fileUrl))) {
         return emitSocketError(ack, "Invalid file URL");
       }
       if (fileUrl && (!allowedFileTypes.has(fileType) ||
-          typeof fileName !== "string" || !fileName || fileName.length > 255 || /[\r\n]/.test(fileName))) {
+        typeof fileName !== "string" || !fileName || fileName.length > 255 || /[\r\n]/.test(fileName))) {
         return emitSocketError(ack, "Invalid file metadata");
       }
 
@@ -161,7 +164,7 @@ io.on("connection", (socket) => {
         roleReceiver = data.roleReceiver;
         const validRoles = ["developer", "seo", "designer", "marketing", "admin"];
         if (!validRoles.includes(roleReceiver) ||
-            (socket.user.role !== "admin" && socket.user.role !== roleReceiver)) {
+          (socket.user.role !== "admin" && socket.user.role !== roleReceiver)) {
           return emitSocketError(ack, "You cannot send to this role");
         }
       } else {
