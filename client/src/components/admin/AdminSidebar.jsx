@@ -32,10 +32,17 @@ function AdminSidebar({ isOpen, onClose }) {
     <div className={`w-64 h-screen bg-slate-900 text-white fixed left-0 top-0 z-50 flex flex-col transform transition-transform duration-300 lg:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}>
 
       <div className="h-16 flex items-center px-4 border-b border-slate-800 gap-2">
-        <div className="bg-white rounded-lg p-1.5 w-full max-w-[190px]">
-          <img src={logo} className="w-full h-auto" alt="Vision Thoughts" />
+        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shrink-0 shadow-lg shadow-teal-900/40">
+            <span className="text-white font-extrabold text-sm tracking-tight">VT</span>
+          </div>
+          <div className="leading-none">
+            <span className="text-white font-bold text-base tracking-tight">
+              Vision<span className="text-teal-400">Thoughts</span>
+            </span>
+          </div>
         </div>
-        <button type="button" onClick={onClose} className="ml-auto p-2 text-slate-400 hover:text-white lg:hidden" aria-label="Close menu">
+        <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-white lg:hidden shrink-0" aria-label="Close menu">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18 18 6M6 6l12 12" /></svg>
         </button>
       </div>
